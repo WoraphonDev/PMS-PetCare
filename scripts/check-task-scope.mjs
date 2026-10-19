@@ -55,6 +55,19 @@ const FORBIDDEN = [
   [/^scripts\//, "guard scripts are read-only"],
   [/(^|\/)\.env(\.|$)(?!example$)/, "never commit .env files"],
 ];
+// drizzle-kit appends one entry per new migration; existing entries (merged migrations) must stay byte-for-byte equal.
+const JOURNAL_RE = /(^|\/)migrations\/meta\/_journal\.json$/;
+const journalAppendError = (file, ref) => {
+  const before = JSON.parse(sh(`git show ${ref}:${file}`));
+  const after = JSON.parse(readFileSync(file, "utf8"));
+  const { entries: oldEntries, ...oldTop } = before;
+  const { entries: newEntries, ...newTop } = after;
+  if (JSON.stringify(oldTop) !== JSON.stringify(newTop)) return "journal header changed (only appending entries is allowed)";
+  if (newEntries.length <= oldEntries.length) return "journal entries removed or not added (only appending entries is allowed)";
+  if (JSON.stringify(newEntries.slice(0, oldEntries.length)) !== JSON.stringify(oldEntries))
+    return "existing journal entries changed (merged migrations are immutable)";
+  return null;
+};
 const violations = [];
 for (const { status, file, from } of changes) {
   if (from) violations.push(`${file}: renames are not allowed in task PRs (from ${from})`);
@@ -74,7 +87,13 @@ for (const { status, file, from } of changes) {
     violations.push(`${file}: other task cards are read-only`);
     continue;
   }
-  if (/\/migrations\//.test(file) && status !== "A") {
+  if (JOURNAL_RE.test(file) && status === "M") {
+    const err = journalAppendError(file, mergeBase);
+    if (err) {
+      violations.push(`${file}: ${err}`);
+      continue;
+    }
+  } else if (/\/migrations\//.test(file) && status !== "A") {
     violations.push(`${file}: merged migrations are immutable (status ${status})`);
     continue;
   }
