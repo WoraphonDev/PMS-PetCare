@@ -28,6 +28,19 @@
 | **Reviewer/Tester** | agent **อีกตัว** (ถ้า Dev เป็น Claude → review ด้วย Codex และกลับกัน) ตรวจ PR เทียบ spec, รัน E2E, เขียน test เพิ่มในการ์ด test แยก | แก้โค้ดใน PR ของคนอื่นตรง ๆ (comment แทน) |
 | **Release** | ทำงานผ่าน pipeline เท่านั้น: สร้าง release PR, tag, สั่ง deploy staging, ตรวจ smoke test | ถือ credential ของ production, รันคำสั่งกับ DB production ตรง |
 
+### 2.1 Review loop อัตโนมัติ (เพิ่ม 2026-10-20)
+
+มนุษย์ไม่ต้องส่งต่อข้อความระหว่าง agent: Dev agent เรียก reviewer เอง
+
+1. Dev agent เปิด PR และรอ CI ผ่าน
+2. รัน `scripts/codex-review.sh T-NNNN <round>` (Codex CLI `codex review --base origin/main`, sandbox read-only) — ผลต้องจบด้วย `VERDICT: CLEAN` หรือ `VERDICT: CHANGES_REQUESTED`
+3. โพสต์ผล review ลง PR (ตรวจย้อนหลังได้)
+4. แก้ finding P0–P2 หรือตอบเหตุผลที่ไม่เห็นด้วยใน PR → push → review รอบถัดไป
+5. สูงสุด 3 รอบ; ไม่จบ / ขัดแย้งกัน / เป็นคำถาม spec → หยุดและถามมนุษย์
+6. `CLEAN` + CI ผ่าน → แจ้งมนุษย์ว่า PR พร้อม merge
+
+ระยะถัดไป (เมื่อ flow นิ่ง): ย้าย loop ไป GitHub (Codex automatic review + Claude Code GitHub Action) และเปิด auto-merge สำหรับ PR ที่ไม่ใช่ `human_review` — ต้องมี ADR แก้ไขก่อน
+
 ### 3. Gate ที่บังคับด้วยระบบ (ไม่ใช่ด้วยความสมัครใจของ agent)
 
 1. **Branch protection บน `main`:** ต้องผ่าน CI ทุก job + review approval จาก agent อีกตัว; ห้าม force-push
