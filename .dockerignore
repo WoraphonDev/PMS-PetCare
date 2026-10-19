@@ -2,8 +2,7 @@
 **/dist
 **/.turbo
 .git
-.env
-.env.*
+**/.env*
 !.env.example
 docs
 .agent-review
