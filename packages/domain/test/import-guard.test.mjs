@@ -1,4 +1,5 @@
-// Verifies the biome noRestrictedImports guard on packages/domain/src (ADR-0002: no internal packages, no Node built-ins / I/O).
+// Verifies the biome guards on packages/domain/src (ADR-0002: no internal packages, no Node built-ins / I/O):
+// correctness/noNodejsModules (every Node built-in, any form) + style/noRestrictedImports (@app/*, pg).
 // Plain .mjs so it can use node:child_process without adding @types/node to the domain package.
 import { execFileSync } from "node:child_process";
 import { rmSync, writeFileSync } from "node:fs";
@@ -9,7 +10,7 @@ import { describe, expect, it } from "vitest";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const biome = join(repoRoot, "node_modules/.bin/biome");
 
-function restrictedImportDiagnostics(importLine) {
+function guardDiagnostics(importLine) {
   const rel = `packages/domain/src/__import_guard_probe_${process.pid}_${Math.random().toString(36).slice(2)}.ts`;
   const binding = /import\s+(?:\{\s*)?(\w+)/.exec(importLine)[1];
   writeFileSync(join(repoRoot, rel), `${importLine}\nexport const probe = [${binding}];\n`);
@@ -20,7 +21,7 @@ function restrictedImportDiagnostics(importLine) {
     } catch (err) {
       output = `${err.stdout}${err.stderr}`;
     }
-    return output.split("lint/style/noRestrictedImports").length - 1;
+    return (output.match(/lint\/(style\/noRestrictedImports|correctness\/noNodejsModules)/g) ?? []).length;
   } finally {
     rmSync(join(repoRoot, rel), { force: true });
   }
@@ -39,10 +40,10 @@ describe("packages/domain import guard", () => {
     'import pg from "pg";',
     'import { z } from "@app/contracts";',
   ])("blocks %s", (line) => {
-    expect(restrictedImportDiagnostics(line)).toBe(1);
+    expect(guardDiagnostics(line)).toBe(1);
   });
 
   it.each(['import { fixedClock } from "./clock";', 'import { z } from "zod";'])("allows %s", (line) => {
-    expect(restrictedImportDiagnostics(line)).toBe(0);
+    expect(guardDiagnostics(line)).toBe(0);
   });
 });
