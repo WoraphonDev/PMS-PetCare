@@ -50,6 +50,20 @@
       "when": 1792436657363,
       "tag": "0006_identity_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792438191601,
+      "tag": "0007_org_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792438192155,
+      "tag": "0008_rls_org_tables",
+      "breakpoints": true
     }
   ]
 }
