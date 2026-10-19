@@ -24,6 +24,8 @@ export const branch = pgTable(
   },
   (t) => [
     unique("branch_org_id_name_unique").on(t.orgId, t.name),
+    // Target of composite (org_id, branch_id) FKs — Q-0014.
+    unique("branch_org_id_id_unique").on(t.orgId, t.id),
     check("branch_timezone_mvp", sql`${t.timezone} = 'Asia/Bangkok'`),
     // F08: mobile 0XXXXXXXXX or 13-digit tax ID (the tax-ID checksum is validated in the use case).
     check("branch_promptpay_id_format", sql`${t.promptpayId} ~ '^(0[0-9]{9}|[0-9]{13})$'`),
