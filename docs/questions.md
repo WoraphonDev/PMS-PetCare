@@ -80,3 +80,11 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Question: รับ PR ขนาดนี้ หรือแยก
 - Options: (ก) รับตามนี้ — test อยู่กับ constraint ที่มันตรวจ (ข) แยก `constraints.test.ts` + README เป็น PR ถัดไป — CHECK constraint จะ merge ไปก่อนโดยไม่มี test 1 รอบ — แนะนำ: (ก)
 - Answer:
+
+## Q-0013 · index ของ outbox_event: spec กับ T-0004 ไม่ตรงกัน
+- Status: open
+- Raised by: claude · T-0004 · 2026-10-20
+- Context: spec `#tbl-outbox_event` = index (`published_at`) where `published_at is null`; การ์ด T-0004 = index (`occurred_at`) where `published_at is null`. ทำตาม spec (สัญญา) ไปก่อน: `outbox_event_unpublished_idx`
+- Question: worker จะดึง event ที่ยังไม่ส่ง **ตามลำดับเวลา** (`where published_at is null order by occurred_at limit N`) — index บน `occurred_at` ใช้ได้ทั้งกรองและเรียง ส่วน index บน `published_at` (ค่า null ทั้งหมด) ช่วยแค่กรอง แล้วต้อง sort เพิ่ม
+- Options: (ก) แก้ spec เป็น `(occurred_at) where published_at is null` แล้วการ์ด outbox relay (T-0020) เปลี่ยน index ด้วย migration ใหม่ (ข) คงตาม spec — แนะนำ: (ก)
+- Answer:
