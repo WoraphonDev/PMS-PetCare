@@ -1,6 +1,6 @@
 # Task cards
 
-การ์ด 1 ใบ = งาน 1 ชิ้นที่ agent ทำจบใน 1 PR (< 400 บรรทัด) ไฟล์ชื่อ `T-NNNN.md` คัดลอกจาก [`_template.md`](_template.md)
+การ์ด 1 ใบ = งาน 1 ชิ้นที่ agent ทำจบใน 1 PR (< 400 บรรทัดไม่นับ test) ไฟล์ชื่อ `T-NNNN.md` คัดลอกจาก [`_template.md`](_template.md)
 
 ## Front matter
 
@@ -19,4 +19,6 @@
 
 - การ์ดเขียนโดยมนุษย์ หรือ agent ในการ์ดประเภท `spec` ที่มนุษย์อนุมัติ
 - agent ที่ทำการ์ดแก้ได้เฉพาะส่วน `## Status log` ของการ์ดตัวเอง
-- CI ตรวจขอบเขตไฟล์ด้วย `scripts/check-task-scope.mjs` จากชื่อ branch `t-NNNN-slug`
+- CI ตรวจขอบเขตไฟล์ด้วย `scripts/check-task-scope.mjs` จากชื่อ branch `t-NNNN-slug` — id ต้องเป็นตัวเลข 4 หลักเสมอ (ไม่มีต่อท้ายเช่น `b`) ไม่งั้น scope check จะถูกข้าม
+- การ์ด lane `api` ต้องมี `packages/contracts/src/<module>/**` ใน `allowed_paths` เสมอ (Q-0011)
+- ผู้เขียนการ์ดประเมินขนาดโค้ด (ไม่นับ test) ให้ < 400 บรรทัด จากจำนวน endpoint / ตาราง / หน้าจอ (Q-0012)
