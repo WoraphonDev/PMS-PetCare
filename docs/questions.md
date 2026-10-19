@@ -74,9 +74,25 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Answer (2026-10-20): (ก) — `globalPassThroughEnv` merged in PR #4; `pnpm verify` now passes locally on Colima
 
 ## Q-0009 · T-0003 เกิน 400 บรรทัด (502)
-- Status: open
+- Status: answered
 - Raised by: claude · T-0003 · 2026-10-20
 - Context: ไม่นับ lockfile / migration ที่ generate / snapshot — โค้ดจริง ~200 บรรทัด, test ~255 (tenancy 9, RLS gate 1, constraints 18), README ~45. ส่วนที่เกินมาจาก test ที่ Codex review รอบ 1–2 ขอ
 - Question: รับ PR ขนาดนี้ หรือแยก
 - Options: (ก) รับตามนี้ — test อยู่กับ constraint ที่มันตรวจ (ข) แยก `constraints.test.ts` + README เป็น PR ถัดไป — CHECK constraint จะ merge ไปก่อนโดยไม่มี test 1 รอบ — แนะนำ: (ก)
+- Answer (2026-10-20): (ก) — PR #5 merged as is
+
+## Q-0010 · T-0002: Dockerfile ต้องมีขั้น build — แยกเป็นการ์ดใหม่
+- Status: open
+- Raised by: claude · T-0002 · 2026-10-20
+- Context: workspace packages export `./src/*.ts` และ Nest ใช้ decorator metadata → Node รัน TS ตรง ๆ ไม่ได้ (type stripping ไม่รองรับ decorators). Dockerfile จึงต้องมีขั้น build (compile apps/api + packages เป็น JS พร้อม import extension) ซึ่งการ์ดไม่ได้ระบุเครื่องมือ และ T-0002 จะเกิน 400 บรรทัดถ้ารวม
+- Question: แยก "Dockerfile + build" เป็นการ์ดใหม่ (เช่น T-0002b) และเลือกเครื่องมือ build
+- Options: (ก) `tsdown` (Rolldown, MIT) bundle `apps/api` + workspace packages เป็นไฟล์เดียว (ข) `@swc/cli` compile ทีละไฟล์ + `resolveFully` (ค) `esbuild` (MIT) bundle — แนะนำ: (ก) หรือ (ค) เพราะ bundle workspace packages ได้โดยไม่ต้องให้แต่ละ package มี build ของตัวเอง; ใน T-0002 ทำ docker-compose + `.env.example` แล้ว ส่วน Dockerfile ยังไม่ได้ทำ
+- Answer:
+
+## Q-0011 · contract ของ endpoint ที่ไม่มี path ใน allowed_paths
+- Status: open
+- Raised by: claude · T-0002 · 2026-10-20
+- Context: `01-conventions.md` กำหนด contract ที่ `packages/contracts/src/<module>/<file>.ts` แต่ T-0002 ไม่มี path นี้ใน allowed_paths → `SystemHealthResponse` อยู่ใน use case ชั่วคราว (มี TODO อ้าง Q-0011)
+- Question: การ์ด API ต่อจากนี้ให้ใส่ `packages/contracts/src/<module>/**` ใน allowed_paths เสมอ และย้าย health contract ในการ์ดถัดไปที่แตะ contracts
+- Options: (ก) ใช่ — ผู้เขียนการ์ดเติม path ให้ทุกการ์ด API (ข) ให้ check-task-scope อนุญาต contracts ของ module เดียวกันอัตโนมัติ — แนะนำ: (ก) ชัดเจนกว่า
 - Answer:
