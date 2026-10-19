@@ -46,7 +46,8 @@ EOF
 
 echo "codex review $card round $round (base $base) …" >&2
 rm -f "$out"
-if ! codex exec --sandbox read-only --ephemeral -C "$root" -o "$out" "$prompt" >"$out_dir/${card}-round${round}.log" 2>&1; then
+# </dev/null: codex exec otherwise waits for extra input on an open stdin ("Reading additional input from stdin...")
+if ! codex exec --sandbox read-only --ephemeral -C "$root" -o "$out" "$prompt" </dev/null >"$out_dir/${card}-round${round}.log" 2>&1; then
   echo "codex exec failed — see $out_dir/${card}-round${round}.log" >&2
   exit 1
 fi
