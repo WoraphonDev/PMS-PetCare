@@ -1,0 +1,36 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: task scope (task branches t-NNNN-*)
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-task-scope.mjs
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+      - name: pnpm verify
+        run: pnpm verify
+      - name: no skipped/focused tests added
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff origin/${{ github.base_ref }}...HEAD -U0 -- '*.test.ts' '*.test.tsx' '*.spec.ts' '*.e2e.ts' | grep -E '^\+.*\b(it|test|describe)\.(skip|only|todo)\(' ; then
+            echo "::error::.skip/.only/.todo added — not allowed (AGENTS.md rule 4)"; exit 1; fi
