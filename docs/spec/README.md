@@ -14,4 +14,4 @@ spec เป็นสัญญาระหว่างเจ้าของผล
 | ไฟล์ | สถานะ |
 |---|---|
 | [`00-overview.md`](00-overview.md) | accepted (2026-10-19) |
-| [`features/foundation.md`](features/foundation.md) | draft — รออนุมัติ + Q-0005..0007 |
+| [`features/foundation.md`](features/foundation.md) | draft — รออนุมัติ PR #1 |

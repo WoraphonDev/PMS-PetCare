@@ -45,22 +45,22 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
   PR อื่น merge ได้เมื่อ CI ผ่าน + agent อีกตัว review → ADR-0006 (ชดเชยด้าน tenant/สิทธิ์ด้วย gate อัตโนมัติ)
 
 ## Q-0005 · limit ของแพ็กเกจ `mvp_free`
-- Status: open
+- Status: answered
 - Raised by: Claude · features/foundation.md · 2026-10-19
 - Question: ร้านในช่วง MVP ได้กี่สาขา / พนักงานกี่คน
 - Options: (ก) 1 สาขา / 5 คน (ข) 3 สาขา / 15 คน (ค) ไม่จำกัด — แนะนำ: (ก) ร้านขนาดเล็กส่วนใหญ่พอ และ platform admin ปรับรายร้านได้
-- Answer:
+- Answer (WoraphonDev · 2026-10-19): 1 สาขา / 5 พนักงาน → foundation.md tbl-plan
 
 ## Q-0006 · พนักงานที่ไม่มี email login อย่างไร
-- Status: open
+- Status: answered
 - Raised by: Claude · features/foundation.md · 2026-10-19
 - Question: groomer/caretaker บางคนไม่มีหรือไม่ใช้ email
 - Options: (ก) email เท่านั้น (ข) username + รหัสผ่านที่ owner ตั้งให้ (ค) LINE Login สำหรับพนักงาน — แนะนำ: (ข) ใน MVP (ไม่มีค่าใช้จ่าย, owner reset รหัสให้ได้) แล้วเพิ่ม (ค) ภายหลัง
-- Answer:
+- Answer (WoraphonDev · 2026-10-19): (ข) บัญชี managed: username + รหัสผ่านที่ owner/manager ตั้ง, บังคับเปลี่ยนรหัสครั้งแรก; LINE Login ภายหลัง → foundation.md F09
 
 ## Q-0007 · 2FA ใน MVP
-- Status: open
+- Status: answered
 - Raised by: Claude · features/foundation.md · 2026-10-19
 - Question: บังคับ 2FA (TOTP) สำหรับ owner และ platform admin ตั้งแต่ MVP หรือไม่
 - Options: (ก) บังคับ platform admin, owner เปิดเองได้ (ข) ไม่มีใน MVP (ค) บังคับทั้งคู่ — แนะนำ: (ก)
-- Answer:
+- Answer (WoraphonDev · 2026-10-19): (ก) บังคับ platform admin, role อื่นเปิดเองได้ → foundation.md F10

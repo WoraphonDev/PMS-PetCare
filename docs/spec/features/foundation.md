@@ -1,6 +1,6 @@
 # Feature — Foundation
 
-> สถานะ: **draft** (รอเจ้าของผลิตภัณฑ์อนุมัติ) · ADR ที่เกี่ยว: 0002, 0003, 0004, 0005, 0006
+> สถานะ: **draft** (คำถามตอบครบแล้ว — รออนุมัติ PR) · ADR ที่เกี่ยว: 0002, 0003, 0004, 0005, 0006
 > ครอบคลุม: สมัครร้าน, login, organization/branch, พนักงาน+บทบาท, ตั้งค่าร้าน/สาขา, subscription (manual), audit log, outbox, platform admin
 
 ## 1. User stories
@@ -8,7 +8,9 @@
 | id | ในฐานะ | ฉันต้องการ | เพื่อ |
 |---|---|---|---|
 | US-F01 | เจ้าของร้าน | สมัครและสร้างร้านพร้อมสาขาแรก | เริ่มใช้ระบบได้ทันที |
-| US-F02 | พนักงาน | login / logout / ลืมรหัสผ่าน | เข้าใช้งานอย่างปลอดภัย |
+| US-F02 | พนักงาน | login ด้วย email หรือ username / logout / ลืมรหัสผ่าน | เข้าใช้งานอย่างปลอดภัย |
+| US-F02b | owner / manager | สร้างบัญชีให้พนักงานที่ไม่มี email และตั้ง/รีเซ็ตรหัสผ่านให้ | พนักงานทุกคนมีบัญชีของตัวเอง (audit ได้) |
+| US-F02c | owner | เปิด 2FA ให้บัญชีตัวเอง | ป้องกันบัญชีที่มีสิทธิ์สูง |
 | US-F03 | owner / manager | เชิญพนักงานและกำหนดบทบาท/สาขา | แต่ละคนเห็นและทำเฉพาะงานของตัวเอง |
 | US-F04 | owner | ตั้งค่าร้าน (ชื่อ, โลโก้, ข้อมูลใบเสร็จ) | ข้อมูลร้านถูกต้องบนเอกสาร |
 | US-F05 | owner / manager | ตั้งค่าสาขา (ที่อยู่, เวลาเปิด-ปิด, วันหยุด, PromptPay) | ระบบจองและการชำระใช้ข้อมูลที่ถูกต้อง |
@@ -136,8 +138,22 @@ unique (`branch_id`, `weekday`) · สร้างครบ 7 แถวพร้
 ### ตารางของ Better Auth (module `identity`)
 
 `user`, `session`, `account`, `verification` ตาม schema ของ Better Auth (สร้างเป็น Drizzle schema + migration ของเรา)
-เพิ่มคอลัมน์ใน `user`: `is_platform_admin boolean not null default false`
+เพิ่มตารางของ plugin: `two_factor` (TOTP + backup codes), และฟิลด์ของ plugin `username`
 ตารางเหล่านี้ **ไม่มี** `org_id` และไม่เปิด RLS — เข้าถึงผ่าน module `identity` เท่านั้น
+
+คอลัมน์เพิ่มใน `user`:
+
+| column | type | null | หมายเหตุ |
+|---|---|---|---|
+| `is_platform_admin` | boolean | no | default false |
+| `username` | citext | yes | unique ทั้งแพลตฟอร์ม, `^[a-z0-9._-]{3,40}$` |
+| `is_managed` | boolean | no | default false · true = บัญชีที่ร้านสร้างให้ (ไม่มี email จริง) — ดู F09 |
+| `managed_by_org_id` | uuid | yes | ต้องมีค่าเมื่อ `is_managed` |
+| `must_change_password` | boolean | no | default false |
+| `two_factor_enabled` | boolean | no | จาก plugin `twoFactor` |
+
+ถ้า Better Auth บังคับ `email` not null: บัญชี managed เก็บ email ภายในรูปแบบ `<user_id>@managed.invalid`
+ซึ่ง **ห้ามส่งอีเมลไปและห้ามแสดงใน UI** (ถ้าทำแบบนี้ไม่ได้ → เขียน `docs/questions.md`)
 
 <a id="tbl-plan"></a>
 ### `plan` (module `subscription`) — ไม่มี `org_id`
@@ -151,7 +167,7 @@ unique (`branch_id`, `weekday`) · สร้างครบ 7 แถวพร้
 | `price_satang_per_month` | int | no | MVP = 0 |
 | `is_active` | boolean | no | |
 
-seed: `mvp_free` (max_branches 1, max_staff 5, price 0) — ค่า limit ดู Q-0005
+seed: `mvp_free` (max_branches 1, max_staff 5, price 0) — Q-0005
 
 <a id="tbl-subscription"></a>
 ### `subscription` (module `subscription`)
@@ -226,6 +242,20 @@ index (`published_at`) where `published_at is null`
 
 <a id="rule-F08"></a>**F08 — PromptPay ID:** เบอร์มือถือ `^0\d{9}$` หรือเลขผู้เสียภาษี 13 หลักที่ checksum ถูก (`VALIDATION_FAILED`)
 
+<a id="rule-F09"></a>**F09 — บัญชี managed (Q-0006):** owner/manager สร้างบัญชี username + รหัสผ่านให้พนักงานที่ไม่มี email ได้
+- บัญชีผูกกับ org ที่สร้าง (`managed_by_org_id`) เข้าร่วม org อื่นไม่ได้ และไม่มี "ลืมรหัสผ่าน" ทาง email
+- รหัสผ่านที่ owner/manager ตั้งให้ → `must_change_password = true`; login แล้วต้องเปลี่ยนรหัสก่อนเรียก endpoint อื่น (`PASSWORD_CHANGE_REQUIRED`)
+- owner/manager รีเซ็ตรหัสได้เฉพาะบัญชี managed ของ org ตัวเอง (`MANAGED_ACCOUNT_ONLY`); รีเซ็ตแล้วล้าง session ทั้งหมดของบัญชีนั้น
+- นำออกจากร้าน (`staff.remove`) → ปิดบัญชี managed ด้วย (login ไม่ได้)
+- manager สร้าง/รีเซ็ตบัญชีที่ role เป็น owner/manager ไม่ได้ (ตาม ¹)
+- นับรวมใน `max_staff`
+
+<a id="rule-F10"></a>**F10 — 2FA (Q-0007):** TOTP ผ่าน Better Auth plugin `twoFactor` + backup codes 10 ชุด
+- **platform admin บังคับ:** session ที่ยังไม่ผ่าน 2FA เรียก `platform.*` → `TWO_FACTOR_REQUIRED`; ถ้ายังไม่เคยตั้ง 2FA ให้ไปหน้าตั้งค่าก่อน
+- **owner และ role อื่น:** เปิด/ปิดเองได้ (ปิดต้องยืนยันรหัสผ่าน + รหัส 2FA)
+- เปิด 2FA แล้ว login ต้องยืนยันรหัส 6 หลักทุกครั้ง (จำอุปกรณ์ได้ 30 วัน)
+- audit: `auth.two_factor_enabled`, `auth.two_factor_disabled`
+
 ## 5. API
 
 Base: `/api/v1` · JSON · auth ด้วย session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`)
@@ -252,13 +282,20 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 | `INVITATION_INVALID` | 410 | F03 |
 | `ALREADY_MEMBER` | 409 | F03 |
 | `RATE_LIMITED` | 429 | เกิน rate limit |
+| `PASSWORD_CHANGE_REQUIRED` | 403 | F09 |
+| `MANAGED_ACCOUNT_ONLY` | 409 | F09 |
+| `TWO_FACTOR_REQUIRED` | 403 | F10 |
 
 ### Endpoints
 
 | key | method · path | สิทธิ์ | หมายเหตุ |
 |---|---|---|---|
 | <a id="ep-auth.signup"></a>`auth.signup` | `POST /auth/signup` | public | `{ email, password, displayName, orgName, orgSlug, branchName }` → สร้าง user + org + branch + hours + membership owner + subscription `mvp_free` ใน transaction เดียว; ส่งอีเมลยืนยัน · errors: `VALIDATION_FAILED`, `CONFLICT` (email/slug), `RATE_LIMITED` |
-| <a id="ep-auth.login"></a>`auth.login` | `POST /auth/login` | public | `{ email, password }` · rate limit 5 ครั้ง/15 นาที/email+IP · errors: `UNAUTHENTICATED`, `RATE_LIMITED` |
+| <a id="ep-auth.login"></a>`auth.login` | `POST /auth/login` | public | `{ identifier, password }` (identifier = email หรือ username) · rate limit 5 ครั้ง/15 นาที/identifier+IP · ตอบ `{ twoFactorRequired, mustChangePassword }` · errors: `UNAUTHENTICATED`, `RATE_LIMITED` |
+| <a id="ep-auth.two_factor.verify"></a>`auth.twoFactor.verify` | `POST /auth/2fa/verify` | session รอ 2FA | `{ code, trustDevice? }` (TOTP หรือ backup code) · F10 |
+| <a id="ep-auth.two_factor.enable"></a>`auth.twoFactor.enable` | `POST /auth/2fa/enable` | user | `{ password }` → `{ totpUri, backupCodes }`; มีผลหลัง verify ครั้งแรก · audit |
+| <a id="ep-auth.two_factor.disable"></a>`auth.twoFactor.disable` | `POST /auth/2fa/disable` | user | `{ password, code }` · platform admin ปิดไม่ได้ (`FORBIDDEN`) · audit |
+| <a id="ep-auth.password_change"></a>`auth.passwordChange` | `POST /auth/password/change` | user | `{ currentPassword, newPassword }` · ล้าง `must_change_password` · ล้าง session อื่น |
 | <a id="ep-auth.logout"></a>`auth.logout` | `POST /auth/logout` | user | |
 | <a id="ep-auth.password_forgot"></a>`auth.passwordForgot` | `POST /auth/password/forgot` | public | ตอบ 204 เสมอ (ไม่บอกว่ามี email หรือไม่) |
 | <a id="ep-auth.password_reset"></a>`auth.passwordReset` | `POST /auth/password/reset` | public | `{ token, password }` · ล้าง session อื่นทั้งหมด |
@@ -275,6 +312,8 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 | <a id="ep-staff.invite"></a>`staff.invite` | `POST /staff/invitations` | `staff.invite` | `{ email, role, branchIds }` · F02, F03, F05 · ส่งอีเมล · audit `staff.invited` |
 | <a id="ep-staff.invitation.revoke"></a>`staff.invitation.revoke` | `DELETE /staff/invitations/{invitationId}` | `staff.invite` | |
 | <a id="ep-invitation.accept"></a>`invitation.accept` | `POST /invitations/accept` | user (หรือสมัครใหม่ใน flow เดียวกัน) | `{ token }` · F03 · audit `staff.joined` |
+| <a id="ep-staff.account.create"></a>`staff.account.create` | `POST /staff/accounts` | `staff.invite` | `{ displayName, username, password, role, branchIds }` · F02, F05, F09 · `CONFLICT` เมื่อ username ซ้ำ · audit `staff.account_created` |
+| <a id="ep-staff.password.reset"></a>`staff.password.reset` | `PUT /staff/{membershipId}/password` | `staff.update` | `{ newPassword }` · F09 · audit `staff.password_reset` |
 | <a id="ep-staff.update"></a>`staff.update` | `PATCH /staff/{membershipId}` | `staff.update` | `{ role?, branchIds?, displayName? }` · F01, F02, ¹ · audit `staff.role_changed` |
 | <a id="ep-staff.remove"></a>`staff.remove` | `DELETE /staff/{membershipId}` | `staff.remove` | F01 · ล้าง session ของผู้ใช้ใน org นี้ · audit `staff.removed` |
 | <a id="ep-audit.list"></a>`audit.list` | `GET /audit-logs?from&to&action&actorUserId&cursor` | `audit.read` | เรียงใหม่ → เก่า, cursor pagination 50/หน้า |
@@ -288,7 +327,7 @@ Response DTO ใช้ชื่อ camelCase ของคอลัมน์ใ�
 
 ## 6. Audit actions
 
-`org.updated` · `branch.created` · `branch.updated` · `branch.payment_settings_updated` · `staff.invited` · `staff.joined` · `staff.role_changed` · `staff.removed` · `auth.password_reset` · `platform.org_status_changed` · `platform.plan_changed`
+`org.updated` · `branch.created` · `branch.updated` · `branch.payment_settings_updated` · `staff.invited` · `staff.joined` · `staff.account_created` · `staff.password_reset` · `staff.role_changed` · `staff.removed` · `auth.password_reset` · `auth.two_factor_enabled` · `auth.two_factor_disabled` · `platform.org_status_changed` · `platform.plan_changed`
 — เขียน **ใน transaction เดียวกับการเปลี่ยนข้อมูล**
 
 ## 7. หน้าจอ (PMS web)
@@ -296,13 +335,16 @@ Response DTO ใช้ชื่อ camelCase ของคอลัมน์ใ�
 | id | path | ผู้ใช้ | เนื้อหา |
 |---|---|---|---|
 | <a id="scr-auth-signup"></a>`scr-auth-signup` | `/signup` | public | ฟอร์ม US-F01: ชื่อ, email, รหัสผ่าน, ชื่อร้าน, slug (สร้างอัตโนมัติจากชื่อ แก้ได้), ชื่อสาขาแรก |
-| <a id="scr-auth-login"></a>`scr-auth-login` | `/login` | public | email, รหัสผ่าน, ลิงก์ลืมรหัสผ่าน |
+| <a id="scr-auth-login"></a>`scr-auth-login` | `/login` | public | "email หรือชื่อผู้ใช้", รหัสผ่าน, ลิงก์ลืมรหัสผ่าน (สำหรับบัญชี email) |
+| <a id="scr-auth-2fa"></a>`scr-auth-2fa` | `/login/2fa` | session รอ 2FA | รหัส 6 หลัก หรือ backup code, ☐ จำอุปกรณ์นี้ 30 วัน |
+| <a id="scr-auth-change-password"></a>`scr-auth-change-password` | `/change-password` | user | บังคับเมื่อ `mustChangePassword` |
+| <a id="scr-account-security"></a>`scr-account-security` | `/account/security` | user | เปลี่ยนรหัสผ่าน, เปิด/ปิด 2FA (QR + backup codes) |
 | <a id="scr-auth-forgot"></a>`scr-auth-forgot` / `scr-auth-reset` | `/forgot-password`, `/reset-password` | public | |
 | <a id="scr-org-switcher"></a>`scr-org-switcher` | (เมนูบน) | user | เลือก org + สาขา; จำค่าล่าสุด |
 | <a id="scr-settings-org"></a>`scr-settings-org` | `/settings/org` | owner | ฟิลด์ `tbl-organization` |
 | <a id="scr-settings-branches"></a>`scr-settings-branches` | `/settings/branches` | owner, manager | รายการสาขา + ปุ่มเพิ่ม (ซ่อนเมื่อถึง limit พร้อมข้อความแพ็กเกจ) |
 | <a id="scr-settings-branch"></a>`scr-settings-branch` | `/settings/branches/:id` | owner, manager | แท็บ: ข้อมูล · เวลาเปิด-ปิด · วันหยุด · การชำระเงิน (owner) |
-| <a id="scr-staff"></a>`scr-staff` | `/settings/staff` | owner, manager, front_desk (อ่าน) | ตารางพนักงาน: ชื่อ, email, role, สาขา, สถานะ; คำเชิญค้าง; ปุ่มเชิญ |
+| <a id="scr-staff"></a>`scr-staff` | `/settings/staff` | owner, manager, front_desk (อ่าน) | ตารางพนักงาน: ชื่อ, email หรือ username, role, สาขา, สถานะ, 2FA; คำเชิญค้าง; ปุ่ม "เชิญทาง email" และ "สร้างบัญชี (ไม่มี email)"; เมนู "รีเซ็ตรหัสผ่าน" เฉพาะบัญชี managed |
 | <a id="scr-invite-accept"></a>`scr-invite-accept` | `/invite/:token` | public/user | แสดงชื่อร้าน + role; login หรือสมัครแล้วรับคำเชิญ |
 | <a id="scr-audit"></a>`scr-audit` | `/settings/audit` | owner | ตาราง audit + ตัวกรอง |
 | <a id="scr-subscription"></a>`scr-subscription` | `/settings/subscription` | owner, manager | แพ็กเกจปัจจุบัน + การใช้งาน vs limit |
@@ -321,11 +363,13 @@ Response DTO ใช้ชื่อ camelCase ของคอลัมน์ใ�
 - คำเชิญหมดอายุ / ใช้ซ้ำ / email ไม่ตรง → `INVITATION_INVALID`
 - org `suspended` → ทุก write `ORG_SUSPENDED`, read ผ่าน
 - เกิน `max_branches` → `PLAN_LIMIT_REACHED`
+- บัญชี managed: login ครั้งแรกเรียก endpoint อื่น → `PASSWORD_CHANGE_REQUIRED`; รีเซ็ตรหัสบัญชี email → `MANAGED_ACCOUNT_ONLY`; ถูกนำออก → login ไม่ได้
+- platform admin ที่ยังไม่ผ่าน 2FA เรียก `platform.org.list` → `TWO_FACTOR_REQUIRED`
 - **architecture test:** ทุกตารางที่มีคอลัมน์ `org_id` เปิด RLS และมี policy (ADR-0006)
 - ทุก write ที่อยู่ใน §6 มีแถว audit ใน transaction เดียวกัน (rollback แล้วไม่มี audit ค้าง)
 
-## 9. Open questions
+## 9. Decisions
 
-- Q-0005 limit ของแพ็กเกจ `mvp_free` (สาขา / พนักงาน)
-- Q-0006 พนักงานที่ไม่มี email (เช่น groomer) จะ login อย่างไร
-- Q-0007 บังคับ 2FA สำหรับ owner / platform admin ใน MVP หรือไม่
+- Q-0005 → `mvp_free` = 1 สาขา / 5 พนักงาน
+- Q-0006 → บัญชี managed (username + รหัสผ่านที่ owner/manager ตั้ง) — F09; LINE Login สำหรับพนักงานเป็นเฟสถัดไป
+- Q-0007 → 2FA บังคับ platform admin, role อื่นเปิดเอง — F10
