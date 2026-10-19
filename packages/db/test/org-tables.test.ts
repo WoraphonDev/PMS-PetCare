@@ -55,11 +55,11 @@ beforeAll(async () => {
     });
   }
   memberA = one(await inA((tx) => tx.insert(membership).values({ orgId: A, userId, role: "groomer", displayName: "G" }).returning())).id;
-  memberB = (
+  memberB = one(
     await withTenant(t.runtimeDb, B, (tx) =>
       tx.insert(membership).values({ orgId: B, userId, role: "owner", displayName: "O" }).returning(),
-    )
-  )[0]!.id;
+    ),
+  ).id;
   await withPlatform(t.platformDb, (tx) => seedPlans(tx));
   planId = one(await t.runtimeDb.select().from(plan).where(eq(plan.code, "mvp_free"))).id;
 }, 120_000);
