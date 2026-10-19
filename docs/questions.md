@@ -64,3 +64,19 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Question: บังคับ 2FA (TOTP) สำหรับ owner และ platform admin ตั้งแต่ MVP หรือไม่
 - Options: (ก) บังคับ platform admin, owner เปิดเองได้ (ข) ไม่มีใน MVP (ค) บังคับทั้งคู่ — แนะนำ: (ก)
 - Answer (WoraphonDev · 2026-10-19): (ก) บังคับ platform admin, role อื่นเปิดเองได้ → foundation.md F10
+
+## Q-0008 · turbo กรอง env ของ Testcontainers ออก (Colima ในเครื่อง)
+- Status: answered
+- Raised by: claude · T-0003 · 2026-10-20
+- Context: Turbo 2 (strict env mode) ไม่ส่ง `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` ให้ task `test` → `pnpm verify` ในเครื่องที่ใช้ Colima fail (Ryuk mount socket ไม่ได้); CI ไม่กระทบเพราะใช้ `/var/run/docker.sock`. `turbo.json` อยู่นอก allowed_paths ของ T-0003
+- Question: เพิ่ม `"globalPassThroughEnv": ["DOCKER_HOST", "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "TESTCONTAINERS_RYUK_DISABLED", "TESTCONTAINERS_HOST_OVERRIDE"]` ใน `turbo.json` ได้ไหม
+- Options: (ก) เพิ่มใน PR โครงสร้าง (#4) (ข) ให้ทุกเครื่องทำ symlink `/var/run/docker.sock` แทน — แนะนำ: (ก) passThrough ไม่กระทบ cache key
+- Answer (2026-10-20): (ก) — `globalPassThroughEnv` merged in PR #4; `pnpm verify` now passes locally on Colima
+
+## Q-0009 · T-0003 เกิน 400 บรรทัด (502)
+- Status: open
+- Raised by: claude · T-0003 · 2026-10-20
+- Context: ไม่นับ lockfile / migration ที่ generate / snapshot — โค้ดจริง ~200 บรรทัด, test ~255 (tenancy 9, RLS gate 1, constraints 18), README ~45. ส่วนที่เกินมาจาก test ที่ Codex review รอบ 1–2 ขอ
+- Question: รับ PR ขนาดนี้ หรือแยก
+- Options: (ก) รับตามนี้ — test อยู่กับ constraint ที่มันตรวจ (ข) แยก `constraints.test.ts` + README เป็น PR ถัดไป — CHECK constraint จะ merge ไปก่อนโดยไม่มี test 1 รอบ — แนะนำ: (ก)
+- Answer:
