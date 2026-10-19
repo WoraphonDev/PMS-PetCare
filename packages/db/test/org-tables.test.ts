@@ -139,6 +139,7 @@ describe("CHECK constraints", () => {
     ["weekday 0", { weekday: 0 }, "branch_hours_weekday_iso"],
     ["weekday 8", { weekday: 8 }, "branch_hours_weekday_iso"],
     ["opens without closes", { weekday: 3, opensAt: "09:00" }, "branch_hours_open_close"],
+    ["closes without opens", { weekday: 3, closesAt: "18:00" }, "branch_hours_open_close"],
     ["opens after closes", { weekday: 3, opensAt: "18:00", closesAt: "09:00" }, "branch_hours_open_close"],
     ["opens equals closes", { weekday: 3, opensAt: "09:00", closesAt: "09:00" }, "branch_hours_open_close"],
   ])("branch_hours rejects %s", async (_label, values, constraint) => {
