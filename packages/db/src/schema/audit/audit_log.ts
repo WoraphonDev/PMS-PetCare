@@ -1,12 +1,12 @@
 import { inet, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { user } from "../identity/user";
 import { organization } from "../org/organization";
 
 // docs/spec/features/foundation.md#tbl-audit_log — append-only (no updated_at; UPDATE/DELETE revoked from app_runtime).
-// actor_user_id gets its FK to "user" when the identity tables arrive.
 export const auditLog = pgTable("audit_log", {
   id: uuid().primaryKey().defaultRandom(),
   orgId: uuid().references(() => organization.id),
-  actorUserId: uuid(),
+  actorUserId: uuid().references(() => user.id),
   action: text().notNull(),
   entityType: text().notNull(),
   entityId: uuid().notNull(),

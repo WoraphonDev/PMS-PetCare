@@ -36,6 +36,20 @@
       "when": 1792435036962,
       "tag": "0004_rls_audit_outbox_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792436656850,
+      "tag": "0005_citext_extension",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792436657363,
+      "tag": "0006_identity_tables",
+      "breakpoints": true
     }
   ]
 }
