@@ -44,4 +44,4 @@ ALTER TABLE "outbox_event" ADD CONSTRAINT "outbox_event_org_id_organization_id_f
 ALTER TABLE "outbox_event" ADD CONSTRAINT "outbox_event_branch_id_branch_id_fk" FOREIGN KEY ("branch_id") REFERENCES "public"."branch"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "usage_event" ADD CONSTRAINT "usage_event_org_id_organization_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organization"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "usage_event" ADD CONSTRAINT "usage_event_branch_id_branch_id_fk" FOREIGN KEY ("branch_id") REFERENCES "public"."branch"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "outbox_event_unpublished_idx" ON "outbox_event" USING btree ("published_at") WHERE "outbox_event"."published_at" is null;
+CREATE INDEX "outbox_event_unpublished_idx" ON "outbox_event" USING btree ("occurred_at") WHERE "outbox_event"."published_at" is null;

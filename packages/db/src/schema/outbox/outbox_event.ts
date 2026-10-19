@@ -20,6 +20,6 @@ export const outboxEvent = pgTable(
     attempts: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  // As specified (Q-0013 proposes indexing occurred_at instead).
-  (t) => [index("outbox_event_unpublished_idx").on(t.publishedAt).where(sql`${t.publishedAt} is null`)],
+  // Worker reads pending events in time order: `where published_at is null order by occurred_at` (Q-0013).
+  (t) => [index("outbox_event_unpublished_idx").on(t.occurredAt).where(sql`${t.publishedAt} is null`)],
 );

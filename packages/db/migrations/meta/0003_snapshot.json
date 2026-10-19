@@ -1,5 +1,5 @@
 {
-  "id": "065abb17-b942-4090-a229-34aa09eacef5",
+  "id": "8266e0ef-b073-4390-9ee8-37f011488af5",
   "prevId": "0e13b3b8-fd95-419b-84ec-cba89e4532c7",
   "version": "7",
   "dialect": "postgresql",
@@ -421,7 +421,7 @@
           "name": "outbox_event_unpublished_idx",
           "columns": [
             {
-              "expression": "published_at",
+              "expression": "occurred_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
