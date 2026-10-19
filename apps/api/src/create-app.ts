@@ -21,6 +21,12 @@ const REDACT = [
   "*.token",
 ];
 
+/** Query strings may carry tokens (reset links, OAuth codes) — never log them. */
+export function withoutQuery(url: string): string {
+  const i = url.indexOf("?");
+  return i === -1 ? url : `${url.slice(0, i)}?[REDACTED]`;
+}
+
 function rootModule(config: Config, extra: Array<Type | DynamicModule>): DynamicModule {
   @Global()
   @Module({})
@@ -39,17 +45,22 @@ function rootModule(config: Config, extra: Array<Type | DynamicModule>): Dynamic
 
 export async function createApp(
   config: Config,
-  opts: { extraModules?: Array<Type | DynamicModule>; logger?: boolean } = {},
+  opts: { extraModules?: Array<Type | DynamicModule>; logger?: boolean; logStream?: { write(line: string): void } } = {},
 ): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({
     genReqId: (req: { headers: Record<string, string | string[] | undefined> }) => requestIdFrom(req.headers),
     logger:
       opts.logger === false
         ? false
-        : { level: config.NODE_ENV === "production" ? "info" : "debug", redact: { paths: REDACT, censor: "[REDACTED]" } },
+        : {
+            level: config.NODE_ENV === "production" ? "info" : "debug",
+            redact: { paths: REDACT, censor: "[REDACTED]" },
+            serializers: { req: (req: { method: string; url: string }) => ({ method: req.method, url: withoutQuery(req.url) }) },
+            ...(opts.logStream ? { stream: opts.logStream } : {}),
+          },
   });
   const app = await NestFactory.create<NestFastifyApplication>(rootModule(config, opts.extraModules ?? []), adapter, {
-    logger: opts.logger === false ? false : undefined,
+    logger: opts.logger === false || opts.logStream ? false : undefined,
   });
   app.setGlobalPrefix("api/v1");
   app.useGlobalFilters(new ErrorFilter());

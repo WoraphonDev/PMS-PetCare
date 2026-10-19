@@ -1,6 +1,8 @@
 import { type ErrorCode, type ErrorResponse, errorHttpStatus } from "@app/contracts";
-import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, Logger } from "@nestjs/common";
+import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException } from "@nestjs/common";
+import { ZodError } from "zod";
 import { AppError } from "./app-error";
+import { fieldErrors } from "./zod.pipe";
 
 interface Reply {
   status(code: number): Reply;
@@ -25,6 +27,10 @@ export function toErrorResponse(err: unknown, log: (e: unknown) => void): { stat
   let details: Record<string, unknown> | undefined;
   if (err instanceof AppError) {
     ({ code, message, details } = err);
+  } else if (err instanceof ZodError) {
+    code = "VALIDATION_FAILED";
+    message = "Invalid request";
+    details = { fields: fieldErrors(err) };
   } else if (err instanceof HttpException && BY_HTTP_STATUS[err.getStatus()]) {
     code = BY_HTTP_STATUS[err.getStatus()] as ErrorCode;
     message = code === "NOT_FOUND" ? "Not found" : "Request rejected";
@@ -45,13 +51,19 @@ function isFastifyClientError(err: unknown): err is { statusCode: number } {
   return typeof status === "number" && status >= 400 && status < 500;
 }
 
+interface RequestWithLog {
+  id: string;
+  log: { error(obj: object, msg: string): void };
+}
+
 @Catch()
 export class ErrorFilter implements ExceptionFilter {
-  private readonly logger = new Logger("ErrorFilter");
-
   catch(err: unknown, host: ArgumentsHost) {
-    const reply = host.switchToHttp().getResponse<Reply>();
-    const { status, body } = toErrorResponse(err, (e) => this.logger.error(e instanceof Error ? e.stack : String(e)));
+    const http = host.switchToHttp();
+    const req = http.getRequest<RequestWithLog>();
+    const reply = http.getResponse<Reply>();
+    // req.log is Fastify's per-request child logger, so the entry carries reqId = the response's x-request-id.
+    const { status, body } = toErrorResponse(err, (e) => req.log.error({ err: e }, "unexpected error"));
     reply.status(status).send(body);
   }
 }

@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { Module } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { loadConfig } from "./config";
+import { waitForShutdown } from "./worker-lifecycle";
 
 // Worker entrypoint (ADR-0002): same codebase, separate process. Queue consumers arrive with the outbox relay card.
 @Module({})
@@ -15,4 +16,4 @@ try {
 }
 
 const app = await NestFactory.createApplicationContext(WorkerModule);
-app.enableShutdownHooks();
+await waitForShutdown(process, () => app.close()).stopped;

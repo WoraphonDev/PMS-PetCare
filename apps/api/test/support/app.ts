@@ -12,8 +12,14 @@ export const testConfig: Config = {
 };
 
 /** Boots the API in-process (no listening socket); requests go through `app.inject`. */
-export async function bootTestApp(extraModules: unknown[] = []): Promise<NestFastifyApplication> {
-  const app = await createApp(testConfig, { extraModules: extraModules as never[], logger: false });
+export async function bootTestApp(
+  extraModules: unknown[] = [],
+  logStream?: { write(line: string): void },
+): Promise<NestFastifyApplication> {
+  const app = await createApp(
+    testConfig,
+    logStream ? { extraModules: extraModules as never[], logStream } : { extraModules: extraModules as never[], logger: false },
+  );
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   return app;
