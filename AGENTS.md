@@ -15,7 +15,7 @@ Decisions live in `docs/adr/` (read 0001–0006 once). Product behaviour lives i
 6. **Module boundaries (ADR-0002):** call another module only via its `index.ts` public service; cross-module async work via outbox events (ADR-0004); clients call the API only via `packages/api-client`.
 7. **External services only behind our interfaces** (`NotificationChannel`, `FileStorage`, `EmailSender`, `PaymentProvider`, …) — ADR-0005.
 8. **No new dependencies** unless the card lists them under *Dependencies*; license must be MIT / Apache-2.0 / BSD / ISC / PostgreSQL / MPL-2.0.
-9. **Never:** touch production data or credentials, run migrations against a non-local DB yourself, edit a merged migration, commit `.env*` or secrets, log tokens/PII, disable TLS checks, force-push, use `--no-verify`, push to `main`, merge your own PR, change branch protection or CI to make something pass.
+9. **Never:** touch production data or credentials, run migrations against a non-local DB yourself, edit a merged migration, commit `.env*` or secrets, log tokens/PII, disable TLS checks, force-push, use `--no-verify`, push to `main`, run `gh pr merge` yourself (merging happens only via the auto-merge workflow or a human — see Roles), change branch protection or CI to make something pass.
 10. **Small PRs:** < 400 changed lines **excluding tests**, generated migrations/snapshots and the lockfile (Q-0012 — never write fewer tests to fit). Bigger → stop and propose a split in `docs/questions.md`.
 
 ## Roles
@@ -23,6 +23,7 @@ Decisions live in `docs/adr/` (read 0001–0006 once). Product behaviour lives i
 - **Dev agent:** implements a card (workflow below).
 - **Reviewer agent:** a *different* agent from the author (Claude ⇄ Codex). Reviews the PR against the card + cited spec, field by field; runs the card's *Done when*; comments findings, does not push to the author's branch. Cards with `human_review: true` (anything touching money) also need a human approval.
 - **Review loop (automated):** the Dev agent runs `scripts/codex-review.sh T-nnnn <round>` itself, posts the result on the PR, fixes P0–P2 findings (or replies with the reason it disagrees), and repeats — max 3 rounds, then asks the human. Claude Code: use the `deliver-card` skill (`.claude/skills/deliver-card/SKILL.md`). The human is not a messenger between agents.
+- **Merge:** after CI is green and the review loop ends `CLEAN`, the Dev agent adds the label `agent-approved` to a **task-card PR** (`t-NNNN-*`). The `auto-merge` workflow re-checks the card (`owner: agent`, `human_review: false`) and merges once required checks pass; any new push removes the label. Cards with `human_review: true`, and PRs that change spec / ADR / AGENTS.md / CI, are merged by a human — say so in the hand-off.
 - **Release:** only through GitHub Actions (staging auto on merge; production via the `production` environment approval). Agents never hold production secrets.
 
 ## Workflow for every card

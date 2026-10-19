@@ -40,14 +40,23 @@ For round = 1, 2, 3:
 
 After round 3 still `CHANGES_REQUESTED`, or any disagreement you could not settle → stop and ask the human.
 
-## 4. Hand-off to the human
+## 4. Approve for merge
+
+Only when CI is green, the last round is `CLEAN`, and every review thread is resolved:
+
+- Card `human_review: false` → `gh pr edit <n> --add-label agent-approved`. The `auto-merge` workflow re-checks the card and merges after the required checks; watch for its comment if it refuses.
+- Card `human_review: true` → do **not** label; the human reviews and merges.
+
+Never run `gh pr merge` yourself. Pushing again after labelling removes the label — re-run the loop and label again.
+
+## 5. Hand-off to the human
 
 Reply in Thai, short:
 
-- PR link, CI status, changed lines (excluding lockfile/migrations)
+- PR link, CI status, changed lines (excluding tests/lockfile/generated migrations)
 - Codex rounds: what it found and what you changed (one line each); open P3s; disagreements
 - Questions opened (Q-NNNN) or "ไม่มี"
-- `human_review: true` → say clearly "การ์ดนี้แตะเงิน — ต้องให้คุณ review ก่อน merge"
+- Merge: "ติด `agent-approved` แล้ว — จะ merge อัตโนมัติ" or, for `human_review: true`, "การ์ดนี้แตะเงิน — ต้องให้คุณ review และ merge"
 - Next card(s) that become unblocked after this merge
 
-Never merge the PR yourself. Never edit `.github/`, `scripts/`, `.claude/`, `AGENTS.md`, `docs/spec/`, `docs/adr/` in a task branch.
+Never edit `.github/`, `scripts/`, `.claude/`, `AGENTS.md`, `docs/spec/`, `docs/adr/` in a task branch.

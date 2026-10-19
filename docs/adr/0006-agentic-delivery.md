@@ -33,17 +33,29 @@
 มนุษย์ไม่ต้องส่งต่อข้อความระหว่าง agent: Dev agent เรียก reviewer เอง
 
 1. Dev agent เปิด PR และรอ CI ผ่าน
-2. รัน `scripts/codex-review.sh T-NNNN <round>` (Codex CLI `codex review --base origin/main`, sandbox read-only) — ผลต้องจบด้วย `VERDICT: CLEAN` หรือ `VERDICT: CHANGES_REQUESTED`
+2. รัน `scripts/codex-review.sh T-NNNN <round>` (Codex CLI `codex exec --sandbox read-only` อ่าน `git diff origin/main...HEAD`) — ผลต้องจบด้วย `VERDICT: CLEAN` หรือ `VERDICT: CHANGES_REQUESTED`
 3. โพสต์ผล review ลง PR (ตรวจย้อนหลังได้)
 4. แก้ finding P0–P2 หรือตอบเหตุผลที่ไม่เห็นด้วยใน PR → push → review รอบถัดไป
 5. สูงสุด 3 รอบ; ไม่จบ / ขัดแย้งกัน / เป็นคำถาม spec → หยุดและถามมนุษย์
-6. `CLEAN` + CI ผ่าน → แจ้งมนุษย์ว่า PR พร้อม merge
+6. `CLEAN` + CI ผ่าน → ติด label `agent-approved` (การ์ดที่ไม่ใช่ `human_review`) หรือแจ้งมนุษย์ (การ์ด `human_review`)
 
-ระยะถัดไป (เมื่อ flow นิ่ง): ย้าย loop ไป GitHub (Codex automatic review + Claude Code GitHub Action) และเปิด auto-merge สำหรับ PR ที่ไม่ใช่ `human_review` — ต้องมี ADR แก้ไขก่อน
+### 2.2 Auto-merge (เพิ่ม 2026-10-20 — ตาม Q-0004: มนุษย์ review เฉพาะ PR เรื่องเงิน)
+
+`.github/workflows/auto-merge.yml` ทำงานบน GitHub (ไม่ใช่เครื่อง dev):
+- เมื่อติด `agent-approved`: ตรวจเองซ้ำว่า PR มาจาก repo นี้, base = `main`, branch `t-NNNN-*`, การ์ดบน `main` มี `owner: agent` และ `human_review: false`
+  → เปิด GitHub auto-merge (squash) ซึ่งยังรอ required check `verify` และ conversation ที่ resolve ครบตาม branch protection
+  ไม่ผ่านเงื่อนไข → ถอด label และ comment เหตุผล
+- push ใหม่หลังติด label → ถอด label + ยกเลิก auto-merge (commit ใหม่ต้อง review ใหม่)
+
+มนุษย์ merge เอง: การ์ด `human_review: true`, และ PR ที่ไม่ใช่การ์ด (spec / ADR / AGENTS.md / CI / scripts) เพราะเป็นการเปลี่ยนกติกา
+
+ข้อจำกัดที่รู้: merge ด้วย `GITHUB_TOKEN` ไม่ trigger workflow `on: push` ของ `main` — การ์ด pipeline deploy ต้องใช้ `workflow_run` หรือ GitHub App token
+
+ระยะถัดไป (เมื่อ flow นิ่ง): ย้าย review loop ไป GitHub (Codex automatic review + Claude Code GitHub Action) — ต้องมี ADR แก้ไขก่อน
 
 ### 3. Gate ที่บังคับด้วยระบบ (ไม่ใช่ด้วยความสมัครใจของ agent)
 
-1. **Branch protection บน `main`:** ต้องผ่าน CI ทุก job + review approval จาก agent อีกตัว; ห้าม force-push
+1. **Branch protection บน `main`:** ต้องผ่าน CI (`verify`), conversation resolve ครบ, ห้าม push ตรง / force-push; cross-agent review เป็น comment (agent ใช้บัญชี GitHub เดียวกับมนุษย์ จึงนับเป็น approval ไม่ได้)
 2. **CI (`pnpm verify`):** lint, typecheck, unit + integration test (Postgres จริงผ่าน Testcontainers), contract check, task scope check, license check, ห้าม `.skip/.only` ใหม่, ห้ามแก้ไฟล์ test เดิมให้ assertion อ่อนลงโดยไม่มีการ์ดระบุ
 3. **มนุษย์ review เฉพาะการ์ดที่แตะเงิน** (`human_review: true` — ราคา, บิล, การชำระ, มัดจำ/คืนเงิน, subscription, รายงานยอดขาย) — Q-0004
    การ์ดที่แตะสิทธิ์ / tenant / migration ใช้ cross-agent review + gate อัตโนมัติแทน:

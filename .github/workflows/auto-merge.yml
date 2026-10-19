@@ -1,0 +1,72 @@
+# Auto-merge for task-card PRs (ADR-0006 §2.2, Q-0004).
+# The agent adds the `agent-approved` label after CI is green and the Codex review loop ends CLEAN.
+# This workflow re-checks every condition itself — the label alone is not trusted — then enables GitHub
+# auto-merge, which still waits for the required `verify` check and resolved conversations (branch protection).
+# Any new push removes the label and cancels auto-merge, so new commits need a fresh review.
+name: auto-merge
+on:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+permissions:
+  contents: write
+  pull-requests: write
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  reset-on-push:
+    if: github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'agent-approved')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: New commits need a new review — drop approval and cancel auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr edit "$PR" -R "$REPO" --remove-label agent-approved
+          gh pr merge "$PR" -R "$REPO" --disable-auto || true
+          gh pr comment "$PR" -R "$REPO" --body "New commits after \`agent-approved\` — label removed and auto-merge cancelled. Re-run the Codex review loop, then re-apply the label."
+
+  enable:
+    if: github.event.action == 'labeled' && github.event.label.name == 'agent-approved'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Check eligibility
+        id: check
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          fail() { echo "reason=$1" >> "$GITHUB_OUTPUT"; echo "eligible=false" >> "$GITHUB_OUTPUT"; echo "::notice::not eligible: $1"; exit 0; }
+          [ "$HEAD_REPO" = "$BASE_REPO" ] || fail "PR from a fork"
+          [ "$BASE_REF" = "main" ] || fail "base is not main"
+          [[ "$HEAD_REF" =~ ^t-([0-9]{4})- ]] || fail "not a task branch (t-NNNN-*) — spec/ADR/process PRs are merged by a human"
+          card="docs/tasks/T-${BASH_REMATCH[1]}.md"
+          [ -f "$card" ] || fail "card $card not found on main"
+          front=$(awk 'NR==1 && /^---$/ {f=1; next} f && /^---$/ {exit} f' "$card")
+          echo "$front" | grep -qE '^owner: agent$' || fail "card owner is not agent"
+          echo "$front" | grep -qE '^human_review: false$' || fail "card has human_review: true (money) — a human reviews and merges"
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+      - name: Enable auto-merge (waits for required checks)
+        if: steps.check.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: gh pr merge "$PR" -R "$REPO" --auto --squash --delete-branch
+      - name: Explain why not
+        if: steps.check.outputs.eligible != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          REASON: ${{ steps.check.outputs.reason }}
+        run: |
+          gh pr edit "$PR" -R "$REPO" --remove-label agent-approved
+          gh pr comment "$PR" -R "$REPO" --body "Auto-merge not enabled: ${REASON}. A human merges this PR."
