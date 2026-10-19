@@ -1,18 +1,74 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "files": {
-    "includes": ["**", "!docs", "!**/migrations", "!**/node_modules", "!**/.next", "!**/.expo", "!**/dist", "!pnpm-lock.yaml"]
+    "includes": ["**", "!docs", "!**/migrations", "!**/node_modules", "!**/.next", "!**/.expo", "!**/dist", "!**/.turbo", "!pnpm-lock.yaml"]
   },
-  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 140 },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 140
+  },
   "linter": {
     "rules": {
       "preset": "recommended",
-      "suspicious": { "noExplicitAny": "error", "noConsole": { "level": "warn", "options": { "allow": ["warn", "error"] } } },
-      "correctness": { "noUnusedImports": "error", "noUnusedVariables": "error" }
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": {
+          "level": "warn",
+          "options": {
+            "allow": ["warn", "error"]
+          }
+        }
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
+      }
     }
   },
   "overrides": [
-    { "includes": ["scripts/**"], "linter": { "rules": { "suspicious": { "noConsole": "off", "noUndeclaredEnvVars": "off" } } } }
+    {
+      "includes": ["scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off",
+            "noUndeclaredEnvVars": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/domain/src/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          },
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "pg": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002)."
+                },
+                "patterns": [
+                  {
+                    "group": ["@app/*", "pg/*"],
+                    "message": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
   ],
-  "javascript": { "formatter": { "quoteStyle": "double", "semicolons": "always" } }
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    }
+  }
 }
