@@ -59,6 +59,19 @@ describe("logging", () => {
     expect(lines.join("\n")).not.toMatch(/abc-SECRET|cookie-SECRET/);
   });
 
+  it("redacts credential fields at the root and up to two levels deep", () => {
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .log.info(
+        { password: "pw-SECRET-0", token: "tk-SECRET-0", user: { password: "pw-SECRET-1" }, err: { context: { token: "tk-SECRET-2" } } },
+        "probe",
+      );
+    const probe = lines.filter((l) => l.includes('"probe"')).join("\n");
+    expect(probe).toContain("[REDACTED]");
+    expect(probe).not.toMatch(/SECRET-[012]/);
+  });
+
   it("a ZodError thrown directly → 400 VALIDATION_FAILED with details.fields (not 500)", async () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/__log/zod" });
     expect(res.statusCode).toBe(400);

@@ -118,6 +118,8 @@ describe("security headers", () => {
       headers: { origin: "http://localhost:5173", "access-control-request-method": "GET" },
     });
     expect(ok.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(ok.headers["x-request-id"]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(ok.headers["x-content-type-options"]).toBe("nosniff");
     const bad = await app.inject({
       method: "OPTIONS",
       url: "/api/v1/health",

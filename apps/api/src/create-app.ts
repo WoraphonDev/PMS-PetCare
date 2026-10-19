@@ -11,14 +11,13 @@ import type { Config } from "./config";
 import { SystemModule } from "./modules/system/system.module";
 
 // Logged objects never carry credentials (AGENTS.md rule 9).
+const SECRET_KEYS = ["password", "newPassword", "currentPassword", "token", "secret"];
+// pino redact wildcards match one level each, so cover the root and two levels of nesting explicitly.
 const REDACT = [
   "req.headers.authorization",
   "req.headers.cookie",
   'res.headers["set-cookie"]',
-  "*.password",
-  "*.newPassword",
-  "*.currentPassword",
-  "*.token",
+  ...SECRET_KEYS.flatMap((k) => [k, `*.${k}`, `*.*.${k}`]),
 ];
 
 /** Query strings may carry tokens (reset links, OAuth codes) — never log them. */
@@ -64,12 +63,12 @@ export async function createApp(
   });
   app.setGlobalPrefix("api/v1");
   app.useGlobalFilters(new ErrorFilter());
-  app.enableCors({ origin: [config.APP_ORIGIN], credentials: true });
-  await app.register(helmet);
-
+  // Request id + Helmet first: CORS answers preflight requests itself, and those responses need both too.
   const fastify = app.getHttpAdapter().getInstance();
   fastify.addHook("onRequest", async (req, reply) => {
     reply.header("x-request-id", req.id);
   });
+  await app.register(helmet);
+  app.enableCors({ origin: [config.APP_ORIGIN], credentials: true });
   return app;
 }
