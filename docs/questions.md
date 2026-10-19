@@ -122,3 +122,11 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Question: ใช้มาตรฐาน "ทุกตารางที่มีทั้ง `org_id` และ `branch_id` ใช้ FK `(org_id, branch_id) → branch(org_id, id)`" ไหม
 - Options: (ก) ใช่ — เพิ่ม `unique (org_id, id)` ใน branch + เปลี่ยน FK ของ outbox_event / usage_event ในการ์ดถัดไปที่แตะ db (เช่น T-0005) และเขียนกฎนี้ใน 01-conventions (ข) ใช้ guard ใน application อย่างเดียว — แนะนำ: (ก) เป็นชั้นที่สองตาม ADR-0003
 - Answer (WoraphonDev · 2026-10-20): (ก) มาตรฐาน: ทุกตารางที่มี `org_id` + `branch_id` ใช้ FK `(org_id, branch_id) → branch(org_id, id)` — กฎใน 01-conventions (PR #7); ทำใน T-0005 พร้อมเปลี่ยน FK ของ outbox_event / usage_event; guard `assertBranchOfOrg` ใน helper คงไว้
+
+## Q-0015 · `.env.example` ตั้ง `BUILD_SHA=dev` ทับค่าที่ฝังใน image
+- Status: open
+- Raised by: claude · T-0031 · 2026-10-20
+- Context: T-0031 *Done when* รัน image ด้วย `--env-file .env.example` แล้วคาดว่า `/health` ตอบ `version: t0031` แต่ `.env.example` มี `BUILD_SHA=dev` ซึ่ง runtime env ทับ `ENV BUILD_SHA` ของ image → ได้ `dev`. Image ถูกต้อง (ทดสอบด้วย env file ที่ไม่มี `BUILD_SHA` → ได้ `t0031`). `.env.example` อยู่นอก allowed_paths ของ T-0031
+- Question: ลบ `BUILD_SHA` ออกจาก `.env.example` (config มี default `dev` อยู่แล้ว) ในการ์ด/PR ถัดไปที่แตะไฟล์นี้
+- Options: (ก) ลบออก — ค่าระบุตัว build ควรมาจาก build เท่านั้น (ข) คงไว้และแก้คำสั่ง smoke ของการ์ด — แนะนำ: (ก)
+- Answer:
