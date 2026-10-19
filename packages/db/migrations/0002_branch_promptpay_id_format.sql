@@ -1,0 +1,1 @@
+ALTER TABLE "branch" ADD CONSTRAINT "branch_promptpay_id_format" CHECK ("branch"."promptpay_id" ~ '^(0[0-9]{9}|[0-9]{13})$');

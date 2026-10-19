@@ -15,6 +15,13 @@
       "when": 1792431762776,
       "tag": "0001_rls_org_branch",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792432192485,
+      "tag": "0002_branch_promptpay_id_format",
+      "breakpoints": true
     }
   ]
 }

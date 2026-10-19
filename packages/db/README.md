@@ -8,7 +8,10 @@ Drizzle schema, SQL migrations and the tenancy helpers (ADR-0003).
 pnpm --filter @app/db generate -- --name <slug>              # schema change → new SQL migration (commit it)
 pnpm --filter @app/db exec drizzle-kit generate --custom --name <slug>   # empty migration for RLS / constraints Drizzle can't express
 pnpm --filter @app/db test                                    # Postgres 17 via Testcontainers (needs Docker)
+DATABASE_MIGRATOR_URL=postgres://app_migrator:…@host/db pnpm --filter @app/db migrate   # apply migrations
 ```
+
+`migrate` must connect as **`app_migrator`** (owner of the tables) — never as `app_runtime` or a superuser.
 
 Never edit a migration after it is merged. Never run `drizzle-kit push`.
 

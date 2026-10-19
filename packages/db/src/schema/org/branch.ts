@@ -22,5 +22,10 @@ export const branch = pgTable(
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [unique("branch_org_id_name_unique").on(t.orgId, t.name), check("branch_timezone_mvp", sql`${t.timezone} = 'Asia/Bangkok'`)],
+  (t) => [
+    unique("branch_org_id_name_unique").on(t.orgId, t.name),
+    check("branch_timezone_mvp", sql`${t.timezone} = 'Asia/Bangkok'`),
+    // F08: mobile 0XXXXXXXXX or 13-digit tax ID (the tax-ID checksum is validated in the use case).
+    check("branch_promptpay_id_format", sql`${t.promptpayId} ~ '^(0[0-9]{9}|[0-9]{13})$'`),
+  ],
 );
