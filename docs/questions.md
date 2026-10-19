@@ -72,3 +72,11 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Question: เพิ่ม `"globalPassThroughEnv": ["DOCKER_HOST", "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "TESTCONTAINERS_RYUK_DISABLED", "TESTCONTAINERS_HOST_OVERRIDE"]` ใน `turbo.json` ได้ไหม
 - Options: (ก) เพิ่มใน PR โครงสร้าง (#4) (ข) ให้ทุกเครื่องทำ symlink `/var/run/docker.sock` แทน — แนะนำ: (ก) passThrough ไม่กระทบ cache key
 - Answer:
+
+## Q-0009 · T-0003 เกิน 400 บรรทัด (475)
+- Status: open
+- Raised by: claude · T-0003 · 2026-10-20
+- Context: ไม่นับ lockfile / migration ที่ generate / snapshot — โค้ดจริง ~200 บรรทัด, test ~230 (tenancy 9, RLS gate 1, constraints 18), README ~45. ส่วนที่เกินมาจาก test ที่ Codex review รอบ 1 ขอ
+- Question: รับ PR ขนาดนี้ หรือแยก
+- Options: (ก) รับตามนี้ — test อยู่กับ constraint ที่มันตรวจ (ข) แยก `constraints.test.ts` + README เป็น PR ถัดไป — CHECK constraint จะ merge ไปก่อนโดยไม่มี test 1 รอบ — แนะนำ: (ก)
+- Answer:
