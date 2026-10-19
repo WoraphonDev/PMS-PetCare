@@ -16,7 +16,7 @@ Decisions live in `docs/adr/` (read 0001–0006 once). Product behaviour lives i
 7. **External services only behind our interfaces** (`NotificationChannel`, `FileStorage`, `EmailSender`, `PaymentProvider`, …) — ADR-0005.
 8. **No new dependencies** unless the card lists them under *Dependencies*; license must be MIT / MIT-0 / Apache-2.0 / BSD / ISC / PostgreSQL / MPL-2.0.
 9. **Never:** touch production data or credentials, run migrations against a non-local DB yourself, edit a merged migration, commit `.env*` or secrets, log tokens/PII, disable TLS checks, force-push, use `--no-verify`, push to `main`, merge your own PR, change branch protection or CI to make something pass.
-10. **Small PRs:** < 400 changed lines (excluding generated migrations/snapshots). Bigger → stop and propose a split in `docs/questions.md`.
+10. **Small PRs:** < 400 changed lines **excluding tests**, generated migrations/snapshots and the lockfile (Q-0012 — never write fewer tests to fit). Bigger → stop and propose a split in `docs/questions.md`.
 
 ## Roles
 

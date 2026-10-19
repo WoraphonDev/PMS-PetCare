@@ -74,9 +74,51 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Answer (2026-10-20): (ก) — `globalPassThroughEnv` merged in PR #4; `pnpm verify` now passes locally on Colima
 
 ## Q-0009 · T-0003 เกิน 400 บรรทัด (502)
-- Status: open
+- Status: answered
 - Raised by: claude · T-0003 · 2026-10-20
 - Context: ไม่นับ lockfile / migration ที่ generate / snapshot — โค้ดจริง ~200 บรรทัด, test ~255 (tenancy 9, RLS gate 1, constraints 18), README ~45. ส่วนที่เกินมาจาก test ที่ Codex review รอบ 1–2 ขอ
 - Question: รับ PR ขนาดนี้ หรือแยก
 - Options: (ก) รับตามนี้ — test อยู่กับ constraint ที่มันตรวจ (ข) แยก `constraints.test.ts` + README เป็น PR ถัดไป — CHECK constraint จะ merge ไปก่อนโดยไม่มี test 1 รอบ — แนะนำ: (ก)
+- Answer (2026-10-20): (ก) — PR #5 merged as is
+
+## Q-0010 · T-0002: Dockerfile ต้องมีขั้น build — แยกเป็นการ์ดใหม่
+- Status: answered
+- Raised by: claude · T-0002 · 2026-10-20
+- Context: workspace packages export `./src/*.ts` และ Nest ใช้ decorator metadata → Node รัน TS ตรง ๆ ไม่ได้ (type stripping ไม่รองรับ decorators). Dockerfile จึงต้องมีขั้น build (compile apps/api + packages เป็น JS พร้อม import extension) ซึ่งการ์ดไม่ได้ระบุเครื่องมือ และ T-0002 จะเกิน 400 บรรทัดถ้ารวม
+- Question: แยก "Dockerfile + build" เป็นการ์ดใหม่ (เช่น T-0002b) และเลือกเครื่องมือ build
+- Options: (ก) `tsdown` (Rolldown, MIT) bundle `apps/api` + workspace packages เป็นไฟล์เดียว (ข) `@swc/cli` compile ทีละไฟล์ + `resolveFully` (ค) `esbuild` (MIT) bundle — แนะนำ: (ก) หรือ (ค) เพราะ bundle workspace packages ได้โดยไม่ต้องให้แต่ละ package มี build ของตัวเอง; ใน T-0002 ทำ docker-compose + `.env.example` แล้ว ส่วน Dockerfile ยังไม่ได้ทำ
+- Answer (WoraphonDev · 2026-10-20): (ก) แยกการ์ดใหม่ **T-0031** (Dockerfile + tsdown) — PR #7
+
+## Q-0011 · contract ของ endpoint ที่ไม่มี path ใน allowed_paths
+- Status: answered
+- Raised by: claude · T-0002 · 2026-10-20
+- Context: `01-conventions.md` กำหนด contract ที่ `packages/contracts/src/<module>/<file>.ts` แต่ T-0002 ไม่มี path นี้ใน allowed_paths → `SystemHealthResponse` อยู่ใน use case ชั่วคราว (มี TODO อ้าง Q-0011)
+- Question: การ์ด API ต่อจากนี้ให้ใส่ `packages/contracts/src/<module>/**` ใน allowed_paths เสมอ และย้าย health contract ในการ์ดถัดไปที่แตะ contracts
+- Options: (ก) ใช่ — ผู้เขียนการ์ดเติม path ให้ทุกการ์ด API (ข) ให้ check-task-scope อนุญาต contracts ของ module เดียวกันอัตโนมัติ — แนะนำ: (ก) ชัดเจนกว่า
+- Answer (WoraphonDev · 2026-10-20): (ก) การ์ด lane `api` ต้องมี `packages/contracts/src/<module>/**` ใน allowed_paths — PR #7; health contract ย้ายในการ์ดถัดไปที่แตะ `packages/contracts/src/system/`
+
+## Q-0012 · เกณฑ์ PR < 400 บรรทัด ควรไม่นับ test
+- Status: answered
+- Raised by: claude · T-0002 · 2026-10-20
+- Context: T-0003 (502) และ T-0002 (545, ไม่รวม Dockerfile) เกิน 400 เพราะ test — T-0002: โค้ด ~330, test ~190, compose/config ~30. การนับ test ทำให้เกิดแรงจูงใจเขียน test น้อยลง ขัดกับ golden rule 4
+- Question: แก้ AGENTS.md rule 10 เป็น "< 400 changed lines excluding tests, generated migrations/snapshots and lockfile"
+- Options: (ก) แก้ตามนี้ (ข) คงเดิม และผู้เขียนการ์ดแบ่งการ์ดให้เล็กลง (ค) คงเดิมแต่เพิ่มเป็น 600 — แนะนำ: (ก) + ผู้เขียนการ์ดประเมินขนาดโค้ดให้ดีขึ้น
+- Answer (WoraphonDev · 2026-10-20): (ก) AGENTS.md rule 10: < 400 บรรทัด **ไม่นับ test**, migration ที่ generate, lockfile — PR #7
+
 - Answer:
+
+## Q-0013 · index ของ outbox_event: spec กับ T-0004 ไม่ตรงกัน
+- Status: answered
+- Raised by: claude · T-0004 · 2026-10-20
+- Context: spec `#tbl-outbox_event` = index (`published_at`) where `published_at is null`; การ์ด T-0004 = index (`occurred_at`) where `published_at is null`. ทำตาม spec (สัญญา) ไปก่อน: `outbox_event_unpublished_idx`
+- Question: worker จะดึง event ที่ยังไม่ส่ง **ตามลำดับเวลา** (`where published_at is null order by occurred_at limit N`) — index บน `occurred_at` ใช้ได้ทั้งกรองและเรียง ส่วน index บน `published_at` (ค่า null ทั้งหมด) ช่วยแค่กรอง แล้วต้อง sort เพิ่ม
+- Options: (ก) แก้ spec เป็น `(occurred_at) where published_at is null` แล้วการ์ด outbox relay (T-0020) เปลี่ยน index ด้วย migration ใหม่ (ข) คงตาม spec — แนะนำ: (ก)
+- Answer (WoraphonDev · 2026-10-20): (ก) index `(occurred_at) where published_at is null` — แก้ใน T-0004 (migration ยังไม่ merge) + spec แก้ใน PR #7
+
+## Q-0014 · ตารางที่มี branch_id ควรใช้ composite FK กันอ้างสาขาของร้านอื่น
+- Status: answered
+- Raised by: claude · T-0004 (Codex review) · 2026-10-20
+- Context: FK `branch_id → branch.id` ตรวจแค่ว่าสาขามีอยู่ — RI check ไม่ผ่าน RLS จึงใส่สาขาของร้าน B ในแถวของร้าน A ได้ (ทดสอบแล้ว). T-0004 ใส่ guard ใน helper (`assertBranchOfOrg`) ชั่วคราว เพราะการแก้ระดับ DB ต้องแตะ `branch.ts` ซึ่งอยู่นอก allowed_paths
+- Question: ใช้มาตรฐาน "ทุกตารางที่มีทั้ง `org_id` และ `branch_id` ใช้ FK `(org_id, branch_id) → branch(org_id, id)`" ไหม
+- Options: (ก) ใช่ — เพิ่ม `unique (org_id, id)` ใน branch + เปลี่ยน FK ของ outbox_event / usage_event ในการ์ดถัดไปที่แตะ db (เช่น T-0005) และเขียนกฎนี้ใน 01-conventions (ข) ใช้ guard ใน application อย่างเดียว — แนะนำ: (ก) เป็นชั้นที่สองตาม ADR-0003
+- Answer (WoraphonDev · 2026-10-20): (ก) มาตรฐาน: ทุกตารางที่มี `org_id` + `branch_id` ใช้ FK `(org_id, branch_id) → branch(org_id, id)` — กฎใน 01-conventions (PR #7); ทำใน T-0005 พร้อมเปลี่ยน FK ของ outbox_event / usage_event; guard `assertBranchOfOrg` ใน helper คงไว้

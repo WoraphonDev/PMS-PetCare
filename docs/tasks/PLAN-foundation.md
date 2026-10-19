@@ -10,7 +10,8 @@
 | [T-0001](T-0001.md) | packages: config, domain (clock), contracts (error envelope) | — | — |
 | [T-0002](T-0002.md) | `apps/api` skeleton: Nest + Fastify, config, error filter, health, docker-compose | T-0001 | T-0003 |
 | [T-0003](T-0003.md) | `packages/db`: Drizzle, organization/branch, **RLS + test harness + RLS coverage gate** | T-0001 | T-0002 |
-| [T-0004](T-0004.md) | audit_log / outbox_event / usage_event + helpers | T-0003 | — |
+| [T-0004](T-0004.md) | audit_log / outbox_event / usage_event + helpers | T-0003 | T-0031 |
+| [T-0031](T-0031.md) | Docker image ของ `apps/api`: tsdown bundle + Dockerfile (แยกจาก T-0002 ตาม Q-0010) | T-0002 | T-0004 |
 
 T-0002 กับ T-0003 แก้ `pnpm-lock.yaml` ทั้งคู่ — ใบที่ merge ทีหลังให้ rebase แล้ว `pnpm install` ใหม่
 
