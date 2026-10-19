@@ -35,7 +35,7 @@ PetBooking (โปรเจกต์เดิม) ใช้ Next.js เป็น
 | Database | **PostgreSQL 17** | PostgreSQL |
 | ORM / migration | Drizzle ORM + drizzle-kit (SQL migration commit ลง repo) | Apache-2.0 |
 | Cache / queue | **Valkey** (แทน Redis) + BullMQ | BSD-3 / MIT |
-| Auth | **Better Auth** (self-hosted, organization plugin) | MIT |
+| Auth | **Better Auth** (self-hosted; plugins `username`, `twoFactor` — organization/membership เป็นตารางของเราตาม spec foundation) | MIT |
 | PMS web | **React 19 + Vite** SPA + PWA (`vite-plugin-pwa`), TanStack Router + Query | MIT |
 | LIFF (เฟสถัดไป) | React + Vite (`@line/liff`) | MIT / Apache-2.0 |
 | UI | Tailwind CSS v4 + shadcn/ui | MIT |
@@ -62,4 +62,4 @@ Keycloak (เมื่อต้องเป็น OIDC provider ให้พา�
 
 - type/schema ชุดเดียว (`packages/contracts`) ใช้ทั้ง API และ web — agent ทำ feature ครบทุกชั้นในภาษาเดียว
 - ต้องรักษาวินัย modular monolith (ADR-0002)
-- เพิ่ม dependency ต้องระบุใน *Dependencies* ของการ์ด และ license อยู่ใน allow-list: MIT, Apache-2.0, BSD-2/3, ISC, PostgreSQL, MPL-2.0 (อื่น ๆ → `docs/questions.md`)
+- เพิ่ม dependency ต้องระบุใน *Dependencies* ของการ์ด และ license อยู่ใน allow-list: MIT, MIT-0, Apache-2.0, BSD-2/3, ISC, PostgreSQL, MPL-2.0 (อื่น ๆ → `docs/questions.md`)

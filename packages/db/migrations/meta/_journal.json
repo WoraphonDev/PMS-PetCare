@@ -22,6 +22,20 @@
       "when": 1792432192485,
       "tag": "0002_branch_promptpay_id_format",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792435036448,
+      "tag": "0003_audit_outbox_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792435036962,
+      "tag": "0004_rls_audit_outbox_usage",
+      "breakpoints": true
     }
   ]
 }
