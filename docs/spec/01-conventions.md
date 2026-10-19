@@ -27,6 +27,12 @@ endpoint key ในรูป `<module>.<action>` หรือ `<module>.<sub>.<a
 | migration ที่ generate | `packages/db/migrations/NNNN_<slug>.sql` (+ `meta/`) — ห้ามแก้หลัง merge |
 | RLS / constraint ที่ Drizzle ทำไม่ได้ | custom migration ใน `packages/db/migrations/` |
 
+### กฎของตารางในร้าน (ADR-0003)
+
+- ตารางที่มี `org_id` → RLS ENABLE + FORCE + policy `tenant_isolation` (ตรวจโดย `rls-coverage.test.ts`)
+- ตารางที่มีทั้ง `org_id` และ `branch_id` → FK แบบ composite `(org_id, branch_id) → branch (org_id, id)` เสมอ
+  ห้ามใช้ FK `branch_id → branch.id` อย่างเดียว เพราะ RI check ไม่ผ่าน RLS จึงอ้างสาขาของร้านอื่นได้ (Q-0014)
+
 ## Web (PMS)
 
 | อะไร | path |

@@ -214,7 +214,7 @@ seed: `mvp_free` (max_branches 1, max_staff 5, price 0) — Q-0005
 | `published_at` | timestamptz | yes | null = ยังไม่ส่ง |
 | `attempts` | int | no | default 0 |
 
-index (`published_at`) where `published_at is null`
+index (`occurred_at`) where `published_at is null` — worker ดึงตามลำดับเวลา (Q-0013)
 
 ### Enums
 
