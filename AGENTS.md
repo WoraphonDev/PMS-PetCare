@@ -22,6 +22,7 @@ Decisions live in `docs/adr/` (read 0001–0006 once). Product behaviour lives i
 
 - **Dev agent:** implements a card (workflow below).
 - **Reviewer agent:** a *different* agent from the author (Claude ⇄ Codex). Reviews the PR against the card + cited spec, field by field; runs the card's *Done when*; comments findings, does not push to the author's branch. Cards with `human_review: true` (anything touching money) also need a human approval.
+- **Review loop (automated):** the Dev agent runs `scripts/codex-review.sh T-nnnn <round>` itself, posts the result on the PR, fixes P0–P2 findings (or replies with the reason it disagrees), and repeats — max 3 rounds, then asks the human. Claude Code: use the `deliver-card` skill (`.claude/skills/deliver-card/SKILL.md`). The human is not a messenger between agents.
 - **Release:** only through GitHub Actions (staging auto on merge; production via the `production` environment approval). Agents never hold production secrets.
 
 ## Workflow for every card
