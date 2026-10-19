@@ -96,3 +96,11 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Question: การ์ด API ต่อจากนี้ให้ใส่ `packages/contracts/src/<module>/**` ใน allowed_paths เสมอ และย้าย health contract ในการ์ดถัดไปที่แตะ contracts
 - Options: (ก) ใช่ — ผู้เขียนการ์ดเติม path ให้ทุกการ์ด API (ข) ให้ check-task-scope อนุญาต contracts ของ module เดียวกันอัตโนมัติ — แนะนำ: (ก) ชัดเจนกว่า
 - Answer:
+
+## Q-0012 · เกณฑ์ PR < 400 บรรทัด ควรไม่นับ test
+- Status: open
+- Raised by: claude · T-0002 · 2026-10-20
+- Context: T-0003 (502) และ T-0002 (545, ไม่รวม Dockerfile) เกิน 400 เพราะ test — T-0002: โค้ด ~330, test ~190, compose/config ~30. การนับ test ทำให้เกิดแรงจูงใจเขียน test น้อยลง ขัดกับ golden rule 4
+- Question: แก้ AGENTS.md rule 10 เป็น "< 400 changed lines excluding tests, generated migrations/snapshots and lockfile"
+- Options: (ก) แก้ตามนี้ (ข) คงเดิม และผู้เขียนการ์ดแบ่งการ์ดให้เล็กลง (ค) คงเดิมแต่เพิ่มเป็น 600 — แนะนำ: (ก) + ผู้เขียนการ์ดประเมินขนาดโค้ดให้ดีขึ้น
+- Answer:
