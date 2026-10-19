@@ -88,3 +88,11 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Question: worker จะดึง event ที่ยังไม่ส่ง **ตามลำดับเวลา** (`where published_at is null order by occurred_at limit N`) — index บน `occurred_at` ใช้ได้ทั้งกรองและเรียง ส่วน index บน `published_at` (ค่า null ทั้งหมด) ช่วยแค่กรอง แล้วต้อง sort เพิ่ม
 - Options: (ก) แก้ spec เป็น `(occurred_at) where published_at is null` แล้วการ์ด outbox relay (T-0020) เปลี่ยน index ด้วย migration ใหม่ (ข) คงตาม spec — แนะนำ: (ก)
 - Answer:
+
+## Q-0014 · ตารางที่มี branch_id ควรใช้ composite FK กันอ้างสาขาของร้านอื่น
+- Status: open
+- Raised by: claude · T-0004 (Codex review) · 2026-10-20
+- Context: FK `branch_id → branch.id` ตรวจแค่ว่าสาขามีอยู่ — RI check ไม่ผ่าน RLS จึงใส่สาขาของร้าน B ในแถวของร้าน A ได้ (ทดสอบแล้ว). T-0004 ใส่ guard ใน helper (`assertBranchOfOrg`) ชั่วคราว เพราะการแก้ระดับ DB ต้องแตะ `branch.ts` ซึ่งอยู่นอก allowed_paths
+- Question: ใช้มาตรฐาน "ทุกตารางที่มีทั้ง `org_id` และ `branch_id` ใช้ FK `(org_id, branch_id) → branch(org_id, id)`" ไหม
+- Options: (ก) ใช่ — เพิ่ม `unique (org_id, id)` ใน branch + เปลี่ยน FK ของ outbox_event / usage_event ในการ์ดถัดไปที่แตะ db (เช่น T-0005) และเขียนกฎนี้ใน 01-conventions (ข) ใช้ guard ใน application อย่างเดียว — แนะนำ: (ก) เป็นชั้นที่สองตาม ADR-0003
+- Answer:

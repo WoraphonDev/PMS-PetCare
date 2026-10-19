@@ -39,7 +39,8 @@ const pgCode = (e: unknown) => (e as { cause?: { code?: string } })?.cause?.code
 describe("same transaction as the data change", () => {
   it("rolls back audit, outbox and usage together with the change", async () => {
     const branchId = randomUUID();
-    await withTenant(t.runtimeDb, A, async (tx) => {
+    const ABORT = new Error("abort after all writes");
+    const outcome = withTenant(t.runtimeDb, A, async (tx) => {
       await tx.insert(branch).values({ id: branchId, orgId: A, name: "rolled-back" });
       await writeAudit(tx, {
         orgId: A,
@@ -61,8 +62,10 @@ describe("same transaction as the data change", () => {
         occurredAt: NOW,
       });
       await recordUsage(tx, { orgId: A, branchId, kind: "email.send", quantity: 1, unitCostSatang: null, occurredAt: NOW });
-      throw new Error("abort");
-    }).catch(() => undefined);
+      throw ABORT;
+    });
+    // Must reject with our sentinel — proves every write above ran before the rollback.
+    await expect(outcome).rejects.toBe(ABORT);
 
     const counts = await withPlatform(t.platformDb, async (tx) => ({
       branches: (await tx.select().from(branch).where(eq(branch.id, branchId))).length,
@@ -146,6 +149,74 @@ describe("tenant isolation", () => {
         occurredAt: NOW,
       }),
     );
+  });
+});
+
+describe("branch must belong to the row's organization", () => {
+  let branchOfB: string;
+
+  beforeAll(async () => {
+    branchOfB = randomUUID();
+    await withTenant(t.runtimeDb, B, (tx) => tx.insert(branch).values({ id: branchOfB, orgId: B, name: "b-branch" }));
+  });
+
+  it("recordUsage rejects another organization's branch", async () => {
+    await expect(
+      withTenant(t.runtimeDb, A, (tx) =>
+        recordUsage(tx, { orgId: A, branchId: branchOfB, kind: "x", quantity: 1, unitCostSatang: null, occurredAt: NOW }),
+      ),
+    ).rejects.toThrow(/branch .* does not belong/);
+  });
+
+  it("appendOutbox rejects another organization's branch", async () => {
+    await expect(
+      withTenant(t.runtimeDb, A, (tx) =>
+        appendOutbox(tx, {
+          orgId: A,
+          branchId: branchOfB,
+          type: "x",
+          aggregateType: "branch",
+          aggregateId: branchOfB,
+          aggregateVersion: 1,
+          payload: {},
+          occurredAt: NOW,
+        }),
+      ),
+    ).rejects.toThrow(/branch .* does not belong/);
+  });
+
+  it("is also enforced on the platform connection (no RLS there)", async () => {
+    await expect(
+      withPlatform(t.platformDb, (tx) =>
+        appendOutbox(tx, {
+          orgId: A,
+          branchId: branchOfB,
+          type: "x",
+          aggregateType: "branch",
+          aggregateId: branchOfB,
+          aggregateVersion: 1,
+          payload: {},
+          occurredAt: NOW,
+        }),
+      ),
+    ).rejects.toThrow(/branch .* does not belong/);
+  });
+
+  it("an outbox event without an organization cannot name a branch", async () => {
+    await expect(
+      withPlatform(t.platformDb, (tx) =>
+        appendOutbox(tx, {
+          orgId: null,
+          branchId: branchOfB,
+          type: "x",
+          aggregateType: "branch",
+          aggregateId: branchOfB,
+          aggregateVersion: 1,
+          payload: {},
+          occurredAt: NOW,
+        }),
+      ),
+    ).rejects.toThrow(/branch .* does not belong/);
   });
 });
 
