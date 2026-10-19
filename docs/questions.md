@@ -104,3 +104,21 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Question: แก้ AGENTS.md rule 10 เป็น "< 400 changed lines excluding tests, generated migrations/snapshots and lockfile"
 - Options: (ก) แก้ตามนี้ (ข) คงเดิม และผู้เขียนการ์ดแบ่งการ์ดให้เล็กลง (ค) คงเดิมแต่เพิ่มเป็น 600 — แนะนำ: (ก) + ผู้เขียนการ์ดประเมินขนาดโค้ดให้ดีขึ้น
 - Answer (WoraphonDev · 2026-10-20): (ก) AGENTS.md rule 10: < 400 บรรทัด **ไม่นับ test**, migration ที่ generate, lockfile — PR #7
+
+- Answer:
+
+## Q-0013 · index ของ outbox_event: spec กับ T-0004 ไม่ตรงกัน
+- Status: answered
+- Raised by: claude · T-0004 · 2026-10-20
+- Context: spec `#tbl-outbox_event` = index (`published_at`) where `published_at is null`; การ์ด T-0004 = index (`occurred_at`) where `published_at is null`. ทำตาม spec (สัญญา) ไปก่อน: `outbox_event_unpublished_idx`
+- Question: worker จะดึง event ที่ยังไม่ส่ง **ตามลำดับเวลา** (`where published_at is null order by occurred_at limit N`) — index บน `occurred_at` ใช้ได้ทั้งกรองและเรียง ส่วน index บน `published_at` (ค่า null ทั้งหมด) ช่วยแค่กรอง แล้วต้อง sort เพิ่ม
+- Options: (ก) แก้ spec เป็น `(occurred_at) where published_at is null` แล้วการ์ด outbox relay (T-0020) เปลี่ยน index ด้วย migration ใหม่ (ข) คงตาม spec — แนะนำ: (ก)
+- Answer (WoraphonDev · 2026-10-20): (ก) index `(occurred_at) where published_at is null` — แก้ใน T-0004 (migration ยังไม่ merge) + spec แก้ใน PR #7
+
+## Q-0014 · ตารางที่มี branch_id ควรใช้ composite FK กันอ้างสาขาของร้านอื่น
+- Status: answered
+- Raised by: claude · T-0004 (Codex review) · 2026-10-20
+- Context: FK `branch_id → branch.id` ตรวจแค่ว่าสาขามีอยู่ — RI check ไม่ผ่าน RLS จึงใส่สาขาของร้าน B ในแถวของร้าน A ได้ (ทดสอบแล้ว). T-0004 ใส่ guard ใน helper (`assertBranchOfOrg`) ชั่วคราว เพราะการแก้ระดับ DB ต้องแตะ `branch.ts` ซึ่งอยู่นอก allowed_paths
+- Question: ใช้มาตรฐาน "ทุกตารางที่มีทั้ง `org_id` และ `branch_id` ใช้ FK `(org_id, branch_id) → branch(org_id, id)`" ไหม
+- Options: (ก) ใช่ — เพิ่ม `unique (org_id, id)` ใน branch + เปลี่ยน FK ของ outbox_event / usage_event ในการ์ดถัดไปที่แตะ db (เช่น T-0005) และเขียนกฎนี้ใน 01-conventions (ข) ใช้ guard ใน application อย่างเดียว — แนะนำ: (ก) เป็นชั้นที่สองตาม ADR-0003
+- Answer (WoraphonDev · 2026-10-20): (ก) มาตรฐาน: ทุกตารางที่มี `org_id` + `branch_id` ใช้ FK `(org_id, branch_id) → branch(org_id, id)` — กฎใน 01-conventions (PR #7); ทำใน T-0005 พร้อมเปลี่ยน FK ของ outbox_event / usage_event; guard `assertBranchOfOrg` ใน helper คงไว้
