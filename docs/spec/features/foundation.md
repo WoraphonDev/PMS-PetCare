@@ -1,6 +1,6 @@
 # Feature — Foundation
 
-> สถานะ: **draft** (คำถามตอบครบแล้ว — รออนุมัติ PR) · ADR ที่เกี่ยว: 0002, 0003, 0004, 0005, 0006
+> สถานะ: **accepted** (PR #1, 2026-10-19) · ADR ที่เกี่ยว: 0002, 0003, 0004, 0005, 0006
 > ครอบคลุม: สมัครร้าน, login, organization/branch, พนักงาน+บทบาท, ตั้งค่าร้าน/สาขา, subscription (manual), audit log, outbox, platform admin
 
 ## 1. User stories
@@ -282,6 +282,7 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 | `INVITATION_INVALID` | 410 | F03 |
 | `ALREADY_MEMBER` | 409 | F03 |
 | `RATE_LIMITED` | 429 | เกิน rate limit |
+| `INTERNAL` | 500 | ข้อผิดพลาดที่ไม่คาดคิด — message ทั่วไป ไม่เปิดเผยรายละเอียดภายใน |
 | `PASSWORD_CHANGE_REQUIRED` | 403 | F09 |
 | `MANAGED_ACCOUNT_ONLY` | 409 | F09 |
 | `TWO_FACTOR_REQUIRED` | 403 | F10 |
@@ -290,6 +291,7 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 
 | key | method · path | สิทธิ์ | หมายเหตุ |
 |---|---|---|---|
+| <a id="ep-system.health"></a>`system.health` | `GET /health` | public | `{ status: "ok", version }` (version = git sha ของ build) · ไม่แตะ DB — ใช้เป็น liveness probe |
 | <a id="ep-auth.signup"></a>`auth.signup` | `POST /auth/signup` | public | `{ email, password, displayName, orgName, orgSlug, branchName }` → สร้าง user + org + branch + hours + membership owner + subscription `mvp_free` ใน transaction เดียว; ส่งอีเมลยืนยัน · errors: `VALIDATION_FAILED`, `CONFLICT` (email/slug), `RATE_LIMITED` |
 | <a id="ep-auth.login"></a>`auth.login` | `POST /auth/login` | public | `{ identifier, password }` (identifier = email หรือ username) · rate limit 5 ครั้ง/15 นาที/identifier+IP · ตอบ `{ twoFactorRequired, mustChangePassword }` · errors: `UNAUTHENTICATED`, `RATE_LIMITED` |
 | <a id="ep-auth.two_factor.verify"></a>`auth.twoFactor.verify` | `POST /auth/2fa/verify` | session รอ 2FA | `{ code, trustDevice? }` (TOTP หรือ backup code) · F10 |
