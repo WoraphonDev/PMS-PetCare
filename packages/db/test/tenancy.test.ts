@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { branch, organization, withPlatform, withTenant } from "../src";
+import * as schema from "../src/schema";
 import { createTestDb, type TestDb } from "./support/test-db";
 
 let t: TestDb;
@@ -60,16 +63,27 @@ describe("withTenant + RLS", () => {
     expect(deleted).toEqual([]);
   });
 
-  it("does not leak app.org_id to the next transaction on the same connection", async () => {
-    const client = await t.runtimeDb.$client.connect();
+  it("does not leak app.org_id from withTenant to the next transaction on the same connection", async () => {
+    // A one-connection pool guarantees both transactions run on the same backend.
+    const single = drizzle({ client: new pg.Pool({ connectionString: t.runtimeUrl, max: 1 }), schema, casing: "snake_case" });
     try {
-      await client.query("begin");
-      await client.query("select set_config('app.org_id', $1, true)", [A]);
-      await client.query("commit");
-      const after = await client.query("select current_setting('app.org_id', true) as v, count(*)::int as n from branch");
-      expect(after.rows[0]).toEqual({ v: "", n: 0 });
+      const inside = await withTenant(single, A, async (tx) => {
+        const r = await tx.execute(
+          sql`select pg_backend_pid() as pid, current_setting('app.org_id', true) as v, (select count(*)::int from branch) as n`,
+        );
+        return r.rows[0];
+      });
+      expect(inside).toMatchObject({ v: A, n: 1 });
+
+      const after = await single.transaction(async (tx) => {
+        const r = await tx.execute(
+          sql`select pg_backend_pid() as pid, current_setting('app.org_id', true) as v, (select count(*)::int from branch) as n`,
+        );
+        return r.rows[0];
+      });
+      expect(after).toEqual({ pid: inside?.pid, v: "", n: 0 });
     } finally {
-      client.release();
+      await single.$client.end();
     }
   });
 

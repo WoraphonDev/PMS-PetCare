@@ -24,6 +24,8 @@ const ROLES_SQL = `
 
 export interface TestDb {
   runtimeDb: Db;
+  /** Connection URL of the runtime role, for tests that need their own pool. */
+  runtimeUrl: string;
   platformDb: Db;
   migratorDb: Db;
   stop(): Promise<void>;
@@ -47,11 +49,13 @@ export async function createTestDb(): Promise<TestDb> {
   };
   const migratorDb = createDb(url("app_migrator", "migrator"));
   await migrate(migratorDb, { migrationsFolder });
-  const runtimeDb = createDb(url("app_runtime", "runtime"));
+  const runtimeUrl = url("app_runtime", "runtime");
+  const runtimeDb = createDb(runtimeUrl);
   const platformDb = createDb(url("app_platform", "platform"));
 
   return {
     runtimeDb,
+    runtimeUrl,
     platformDb,
     migratorDb,
     async stop() {
