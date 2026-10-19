@@ -14,7 +14,7 @@ Decisions live in `docs/adr/` (read 0001–0006 once). Product behaviour lives i
 5. **Data rules:** money = integer satang (`*_satang` / `*Satang`), never floats · instants = UTC `timestamptz` / ISO strings · local dates = `YYYY-MM-DD` strings · current time only from injected `clock`/`now` · tenant data only through the tenant repository helper (sets `org_id` + RLS context) — see ADR-0003.
 6. **Module boundaries (ADR-0002):** call another module only via its `index.ts` public service; cross-module async work via outbox events (ADR-0004); clients call the API only via `packages/api-client`.
 7. **External services only behind our interfaces** (`NotificationChannel`, `FileStorage`, `EmailSender`, `PaymentProvider`, …) — ADR-0005.
-8. **No new dependencies** unless the card lists them under *Dependencies*; license must be MIT / Apache-2.0 / BSD / ISC / PostgreSQL / MPL-2.0.
+8. **No new dependencies** unless the card lists them under *Dependencies*; license must be MIT / MIT-0 / Apache-2.0 / BSD / ISC / PostgreSQL / MPL-2.0.
 9. **Never:** touch production data or credentials, run migrations against a non-local DB yourself, edit a merged migration, commit `.env*` or secrets, log tokens/PII, disable TLS checks, force-push, use `--no-verify`, push to `main`, merge your own PR, change branch protection or CI to make something pass.
 10. **Small PRs:** < 400 changed lines (excluding generated migrations/snapshots). Bigger → stop and propose a split in `docs/questions.md`.
 
