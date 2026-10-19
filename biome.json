@@ -1,18 +1,82 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "files": {
-    "includes": ["**", "!docs", "!**/migrations", "!**/node_modules", "!**/.next", "!**/.expo", "!**/dist", "!pnpm-lock.yaml"]
+    "includes": ["**", "!docs", "!**/migrations", "!**/node_modules", "!**/.next", "!**/.expo", "!**/dist", "!**/.turbo", "!pnpm-lock.yaml"]
   },
-  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 140 },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 140
+  },
   "linter": {
     "rules": {
       "preset": "recommended",
-      "suspicious": { "noExplicitAny": "error", "noConsole": { "level": "warn", "options": { "allow": ["warn", "error"] } } },
-      "correctness": { "noUnusedImports": "error", "noUnusedVariables": "error" }
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": {
+          "level": "warn",
+          "options": {
+            "allow": ["warn", "error"]
+          }
+        }
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
+      }
     }
   },
   "overrides": [
-    { "includes": ["scripts/**"], "linter": { "rules": { "suspicious": { "noConsole": "off", "noUndeclaredEnvVars": "off" } } } }
+    {
+      "includes": ["scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off",
+            "noUndeclaredEnvVars": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/domain/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "pg": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "node:fs": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "node:fs/promises": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "node:net": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "node:http": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "node:https": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "node:child_process": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "fs": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "net": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "http": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "https": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002).",
+                  "child_process": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002)."
+                },
+                "patterns": [
+                  {
+                    "group": ["@app/*"],
+                    "message": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
   ],
-  "javascript": { "formatter": { "quoteStyle": "double", "semicolons": "always" } }
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    }
+  }
 }
