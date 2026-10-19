@@ -1,7 +1,9 @@
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { user } from "./user";
 
-// Better Auth 1.7 core `account` (credential password hash lives in `password`).
+// Better Auth 1.7.11 core `account` (credential password hash lives in `password`).
+// No `issuer` column: it existed only in 1.7.0–1.7.2 and was removed; 1.7.11's schema check reports a required
+// `issuer` as "Better Auth never writes it, so every insert fails" (see the 1.7 upgrade guide).
 export const account = pgTable(
   "account",
   {
