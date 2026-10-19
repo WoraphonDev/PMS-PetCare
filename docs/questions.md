@@ -64,3 +64,11 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Question: บังคับ 2FA (TOTP) สำหรับ owner และ platform admin ตั้งแต่ MVP หรือไม่
 - Options: (ก) บังคับ platform admin, owner เปิดเองได้ (ข) ไม่มีใน MVP (ค) บังคับทั้งคู่ — แนะนำ: (ก)
 - Answer (WoraphonDev · 2026-10-19): (ก) บังคับ platform admin, role อื่นเปิดเองได้ → foundation.md F10
+
+## Q-0008 · turbo กรอง env ของ Testcontainers ออก (Colima ในเครื่อง)
+- Status: open
+- Raised by: claude · T-0003 · 2026-10-20
+- Context: Turbo 2 (strict env mode) ไม่ส่ง `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` ให้ task `test` → `pnpm verify` ในเครื่องที่ใช้ Colima fail (Ryuk mount socket ไม่ได้); CI ไม่กระทบเพราะใช้ `/var/run/docker.sock`. `turbo.json` อยู่นอก allowed_paths ของ T-0003
+- Question: เพิ่ม `"globalPassThroughEnv": ["DOCKER_HOST", "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "TESTCONTAINERS_RYUK_DISABLED", "TESTCONTAINERS_HOST_OVERRIDE"]` ใน `turbo.json` ได้ไหม
+- Options: (ก) เพิ่มใน PR โครงสร้าง (#4) (ข) ให้ทุกเครื่องทำ symlink `/var/run/docker.sock` แทน — แนะนำ: (ก) passThrough ไม่กระทบ cache key
+- Answer:
