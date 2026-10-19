@@ -256,6 +256,12 @@ index (`published_at`) where `published_at is null`
 - เปิด 2FA แล้ว login ต้องยืนยันรหัส 6 หลักทุกครั้ง (จำอุปกรณ์ได้ 30 วัน)
 - audit: `auth.two_factor_enabled`, `auth.two_factor_disabled`
 
+
+<a id="rule-F11"></a>**F11 — รหัสผ่านและการกู้คืน:**
+- รหัสผ่านยาว 10–128 ตัวอักษร (ทุก endpoint ที่ตั้งรหัสผ่าน: signup, reset, change, สร้าง/รีเซ็ตบัญชี managed) — ผิด → `VALIDATION_FAILED`
+- `auth.login`: นับเฉพาะครั้งที่ **ล้มเหลว** — 5 ครั้ง / 15 นาที / (identifier ตัวพิมพ์เล็ก + IP) → `RATE_LIMITED` จนครบ 15 นาที; login สำเร็จรีเซ็ตตัวนับ
+- `auth.passwordForgot`: 3 ครั้ง / ชั่วโมง / (email + IP) → ยังตอบ 204 แต่ไม่ส่งอีเมล
+- token รีเซ็ตรหัสผ่าน: ใช้ได้ครั้งเดียว, อายุ 1 ชั่วโมง; ผิด / หมดอายุ / ใช้แล้ว → `VALIDATION_FAILED` + `details.fields.token`
 ## 5. API
 
 Base: `/api/v1` · JSON · auth ด้วย session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`)
