@@ -42,13 +42,17 @@ After round 3 still `CHANGES_REQUESTED`, or any disagreement you could not settl
 
 ## 4. Approve for merge
 
-Only when CI is green, the last round is `CLEAN`, and every review thread is resolved. Run `scripts/sync-main.sh` once more right before labelling — if it merged anything, push, wait for CI and do one more review round first.
+Only when CI is green, the last round is `CLEAN`, and every review thread is resolved. Run `scripts/sync-main.sh` once more right before labelling — if it merged anything, push and wait for CI (see *Syncing after CLEAN* below).
 
 - Card `human_review: false` → `gh pr edit <n> --add-label agent-approved`. The `auto-merge` workflow re-checks the card and merges after the required checks; watch for its comment if it refuses.
 - Card `human_review: true` → do **not** label; the human reviews and merges.
 
 Never run `gh pr merge` yourself. Pushing again after labelling removes the label — re-run the loop and label again.
-Branch protection requires the branch to be up to date with main. If main moves after labelling, the PR waits: run `scripts/sync-main.sh`, push (this drops the label), wait for CI, one more review round, re-label. (Automatic branch updates need the bot token from process-fixes PR 5.)
+Branch protection requires the branch to be up to date with main. If main moves after labelling, the PR waits: run `scripts/sync-main.sh`, push (this drops the label), wait for CI, re-label per *Syncing after CLEAN*. (Automatic branch updates need the bot token from process-fixes PR 5.)
+
+**Syncing after CLEAN** (does not count toward the 3 review rounds — it adds main's code, not yours):
+- merged cleanly or only lockfile/migrations regenerated, CI green → label again, no new review
+- you resolved a conflict by hand → one *sync review*: `scripts/codex-review.sh T-NNNN sync` on the merge; `CLEAN` → label; anything else → stop and ask the human
 
 ## 5. Hand-off to the human
 
