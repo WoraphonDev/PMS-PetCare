@@ -6,7 +6,7 @@ import { SCRIPTS, tempRepo } from "./helpers.mjs";
 
 // Stub pnpm: `install` rewrites the lockfile, `verify` fails when VERIFY_FAIL=1, `generate` writes nothing.
 const PNPM =
-  '#!/bin/sh\n[ "$1" = install ] && echo "lock: regenerated" > pnpm-lock.yaml\n[ "$1" = verify ] && [ "$VERIFY_FAIL" = 1 ] && exit 1\nexit 0\n';
+  '#!/bin/sh\n[ "$1" = install ] && [ "$INSTALL_FAIL" = 1 ] && exit 1\n[ "$1" = install ] && echo "lock: regenerated" > pnpm-lock.yaml\n[ "$1" = verify ] && [ "$VERIFY_FAIL" = 1 ] && exit 1\nexit 0\n';
 
 // main and the branch diverge from a common base; returns a repo on the branch with the stub pnpm on PATH.
 function diverged(mainChange, branchChange) {
@@ -86,4 +86,12 @@ test("migration conflict where regeneration yields nothing: stops, and a re-run 
   const again = r.sync();
   assert.equal(again.code, 1);
   assert.match(again.out, /previous sync left work to finish/);
+});
+
+test("lockfile regeneration fails: the re-run is blocked instead of reporting up to date", () => {
+  const r = diverged(files({ "pnpm-lock.yaml": "lock: main\n" }), files({ "pnpm-lock.yaml": "lock: branch\n" }));
+  assert.equal(r.sync({ INSTALL_FAIL: "1" }).code, 1);
+  const again = r.sync();
+  assert.equal(again.code, 1);
+  assert.match(again.out, /previous sync left work to finish: regenerate after merging main: pnpm install/);
 });

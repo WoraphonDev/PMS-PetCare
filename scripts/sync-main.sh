@@ -55,7 +55,9 @@ else
     git add pnpm-lock.yaml
   fi
   if ((mig)); then git add -A packages/db/migrations; fi
-  # finish the merge with main's mechanical files, then regenerate on top
+  # Finish the merge with main's mechanical files, then regenerate on top. Mark the work as pending first: if
+  # install/generate fails, a re-run would otherwise see "up to date" and skip the regeneration.
+  echo "regenerate after merging main:$( ((lock)) && echo " pnpm install (lockfile)")$( ((mig)) && echo " drizzle-kit generate (migration; old copies in $backup)")" >"$pending"
   git commit --no-edit -q
   if ((lock)); then
     pnpm install
@@ -76,12 +78,12 @@ else
     done \
       < <(git diff --name-only --diff-filter=A origin/main HEAD -- 'packages/db/migrations/*.sql')
     if [[ -z "$new_sql" || "$old_sql" != "$new_sql" ]]; then
-      echo "migration regenerated after merging main; old copies in $backup" >"$pending"
       echo "regenerated migration is missing or differs from the branch's old one (old copies: $backup)." >&2
       echo "re-create custom SQL with: pnpm --filter @app/db exec drizzle-kit generate --custom --name <name>, then commit, rm $pending and re-run." >&2
       exit 1
     fi
   fi
+  rm -f "$pending"
 fi
 
 pnpm verify
