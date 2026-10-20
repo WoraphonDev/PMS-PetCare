@@ -4,13 +4,18 @@ import {
   AuthPasswordChangeRequest,
   AuthPasswordForgotRequest,
   AuthPasswordResetRequest,
+  AuthTwoFactorDisableRequest,
+  AuthTwoFactorEnableRequest,
+  AuthTwoFactorVerifyRequest,
   type MeResponse,
 } from "@app/contracts";
 import type { Db } from "@app/db";
 import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res, UseGuards } from "@nestjs/common";
-import { CLOCK, type Clock } from "../../common/context";
+import { CLOCK, type Clock, CONFIG } from "../../common/context";
 import { PLATFORM_DB } from "../../common/db";
 import { ZodBody } from "../../common/zod.pipe";
+import type { Config } from "../../config";
+import { EMAIL_SENDER, type EmailSender } from "../notification/email";
 import { AUTH, type Auth, toHeaders } from "./auth";
 import { type AuthedRequest, AuthGuard } from "./auth.guard";
 import { BACKGROUND, type BackgroundWork } from "./background";
@@ -20,6 +25,7 @@ import { authLogout } from "./use-cases/auth.logout";
 import { authPasswordChange } from "./use-cases/auth.password_change";
 import { authPasswordForgot } from "./use-cases/auth.password_forgot";
 import { authPasswordReset } from "./use-cases/auth.password_reset";
+import { authTwoFactor } from "./use-cases/auth.two-factor";
 import { meGet } from "./use-cases/me.get";
 
 interface Reply {
@@ -29,6 +35,8 @@ interface Reply {
 @Controller()
 export class IdentityController {
   constructor(
+    @Inject(CONFIG) private readonly config: Config,
+    @Inject(EMAIL_SENDER) private readonly email: EmailSender,
     @Inject(AUTH) private readonly auth: Auth,
     @Inject(PLATFORM_DB) private readonly platformDb: Db,
     @Inject(LOGIN_LIMITER) private readonly limiter: FailureLimiter,
@@ -44,7 +52,7 @@ export class IdentityController {
     @Req() req: AuthedRequest & { ip: string },
     @Res({ passthrough: true }) reply: Reply,
   ): Promise<AuthLoginResponse> {
-    const result = await authLogin({ ip: req.ip, headers: toHeaders(req.headers) }, body, {
+    const result = await authLogin({ ip: req.ip, headers: toHeaders(req.headers), now: this.clock.now() }, body, {
       auth: this.auth,
       platformDb: this.platformDb,
       limiter: this.limiter,
@@ -100,6 +108,55 @@ export class IdentityController {
       auth: this.auth,
       platformDb: this.platformDb,
     });
+  }
+
+  private async twoFactor(
+    op: "enable" | "verify" | "disable",
+    body: { password?: string; code?: string; trustDevice?: boolean },
+    req: AuthedRequest & { ip: string },
+    reply: Reply,
+  ) {
+    const ua = req.headers["user-agent"];
+    const result = await authTwoFactor(
+      op,
+      body,
+      { headers: toHeaders(req.headers), now: this.clock.now(), ip: req.ip, userAgent: typeof ua === "string" ? ua : null },
+      { platformDb: this.platformDb, config: this.config, email: this.email },
+    );
+    reply.header("set-cookie", result.setCookies);
+    return result.body;
+  }
+
+  @Post("auth/2fa/enable")
+  @HttpCode(200)
+  @UseGuards(AuthGuard)
+  enableTwoFactor(
+    @Body(new ZodBody(AuthTwoFactorEnableRequest)) body: { password: string },
+    @Req() req: AuthedRequest & { ip: string },
+    @Res({ passthrough: true }) reply: Reply,
+  ) {
+    return this.twoFactor("enable", body, req, reply);
+  }
+
+  @Post("auth/2fa/verify")
+  @HttpCode(204)
+  async verifyTwoFactor(
+    @Body(new ZodBody(AuthTwoFactorVerifyRequest)) body: { code: string; trustDevice?: boolean },
+    @Req() req: AuthedRequest & { ip: string },
+    @Res({ passthrough: true }) reply: Reply,
+  ) {
+    await this.twoFactor("verify", body, req, reply);
+  }
+
+  @Post("auth/2fa/disable")
+  @HttpCode(204)
+  @UseGuards(AuthGuard)
+  async disableTwoFactor(
+    @Body(new ZodBody(AuthTwoFactorDisableRequest)) body: { password: string; code: string },
+    @Req() req: AuthedRequest & { ip: string },
+    @Res({ passthrough: true }) reply: Reply,
+  ) {
+    await this.twoFactor("disable", body, req, reply);
   }
 
   @Get("me")

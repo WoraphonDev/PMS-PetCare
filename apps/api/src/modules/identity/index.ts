@@ -2,11 +2,13 @@
 import type { Db } from "@app/db";
 import { Global, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
+import { CLOCK, type Clock } from "../../common/context";
 import { PLATFORM_DB } from "../../common/db";
 import { PasswordChangeGuard, REQUEST_SESSION, sessionResolver } from "../../common/session";
 import { AUTH, type Auth, toHeaders } from "./auth";
 import { IdentityModule as IdentityCoreModule } from "./identity.module";
 import { findUserById } from "./identity.repository";
+import { hasTwoFactorSession } from "./two-factor-session";
 
 @Global()
 @Module({
@@ -14,12 +16,13 @@ import { findUserById } from "./identity.repository";
   providers: [
     {
       provide: REQUEST_SESSION,
-      inject: [AUTH, PLATFORM_DB],
-      useFactory: (auth: Auth, db: Db) =>
+      inject: [AUTH, PLATFORM_DB, CLOCK],
+      useFactory: (auth: Auth, db: Db, clock: Clock) =>
         sessionResolver(async (headers) => {
           const found = await auth.api.getSession({ headers: toHeaders(headers) });
           if (!found) return null;
           const user = await findUserById(db, found.user.id);
+          if (user?.twoFactorEnabled && !(await hasTwoFactorSession(db, found.session.id, user.id, clock.now()))) return null;
           return user ? { user, sessionId: found.session.id } : null;
         }),
     },
@@ -34,3 +37,5 @@ export { type AuthedRequest, AuthGuard } from "./auth.guard";
 export { BACKGROUND, BackgroundWork } from "./background";
 export type { UserRow } from "./identity.repository";
 export { FailureLimiter } from "./rate-limit";
+
+export { hasTwoFactorSession, platformSession } from "./two-factor-session";
