@@ -4,9 +4,10 @@ import helmet from "@fastify/helmet";
 import { type DynamicModule, Global, Module, type Type } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import { AppError } from "./common/app-error";
 import { CLOCK, CONFIG } from "./common/context";
 import { createInfra, type Infra, InfraLifecycle, PLATFORM_DB, RUNTIME_DB, VALKEY } from "./common/db";
-import { ErrorFilter } from "./common/error.filter";
+import { ErrorFilter, toErrorResponse } from "./common/error.filter";
 import { requestIdFrom } from "./common/request-id";
 import type { Config } from "./config";
 import { IdentityModule } from "./modules/identity";
@@ -21,6 +22,19 @@ const REDACT = [
   'res.headers["set-cookie"]',
   ...SECRET_KEYS.flatMap((k) => [k, `*.${k}`, `*.*.${k}`]),
 ];
+
+/**
+ * CSRF guard for cookie-authenticated requests: browsers send `Origin` on every cross-origin and same-origin
+ * POST/PUT/PATCH/DELETE. SameSite=Lax does not stop a sibling sub-domain (same site), and CORS does not stop a simple
+ * request from executing — so a mutating request whose Origin is not APP_ORIGIN is refused before any handler runs.
+ * Requests without Origin (server-to-server, curl) carry no victim cookies and pass.
+ */
+const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function isForbiddenOrigin(method: string, origin: string | undefined, allowed: readonly string[]): boolean {
+  if (SAFE.has(method.toUpperCase()) || origin === undefined) return false;
+  return !allowed.includes(origin);
+}
 
 /** Query strings may carry tokens (reset links, OAuth codes) — never log them. */
 export function withoutQuery(url: string): string {
@@ -78,6 +92,11 @@ export async function createApp(
   const fastify = app.getHttpAdapter().getInstance();
   fastify.addHook("onRequest", async (req, reply) => {
     reply.header("x-request-id", req.id);
+    const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+    if (isForbiddenOrigin(req.method, origin, [config.APP_ORIGIN])) {
+      const { status, body } = toErrorResponse(new AppError("FORBIDDEN", "Origin not allowed"), () => undefined);
+      return reply.status(status).send(body);
+    }
   });
   await app.register(helmet);
   app.enableCors({ origin: [config.APP_ORIGIN], credentials: true });

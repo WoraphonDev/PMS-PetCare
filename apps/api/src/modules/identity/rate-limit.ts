@@ -23,8 +23,13 @@ export class FailureLimiter {
 
   async recordFailure(...parts: string[]): Promise<void> {
     const key = this.key(parts);
-    const count = await this.valkey.incr(key);
-    if (count === 1) await this.valkey.expire(key, this.windowSeconds);
+    // One MULTI: the key is created with its TTL before the first increment, so a counter can never outlive the window.
+    await this.valkey.multi().set(key, 0, "EX", this.windowSeconds, "NX").incr(key).exec();
+  }
+
+  /** Seconds until the counter resets (-2 = no counter). For tests and diagnostics. */
+  ttl(...parts: string[]): Promise<number> {
+    return this.valkey.ttl(this.key(parts));
   }
 
   async reset(...parts: string[]): Promise<void> {
