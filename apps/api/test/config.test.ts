@@ -5,6 +5,8 @@ const valid = {
   NODE_ENV: "production",
   APP_ORIGIN: "https://app.example.com",
   DATABASE_URL: "postgres://app_runtime:s3cr3t-db-pass@db:5432/pms",
+  DATABASE_PLATFORM_URL: "postgres://app_platform:s3cr3t-db-pass@db:5432/pms",
+  BETTER_AUTH_SECRET: "x".repeat(32),
   VALKEY_URL: "redis://valkey:6379",
 };
 
@@ -25,6 +27,10 @@ describe("loadConfig", () => {
     } catch (e) {
       expect(String((e as Error).message)).not.toContain("valkey-secret");
     }
+  });
+
+  it("requires a session secret of at least 32 characters", () => {
+    expect(() => loadConfig({ ...valid, BETTER_AUTH_SECRET: "short-secret-value" })).toThrow(/BETTER_AUTH_SECRET/);
   });
 
   it("rejects an invalid value without echoing it", () => {
