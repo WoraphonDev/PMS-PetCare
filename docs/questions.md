@@ -130,3 +130,11 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Question: ลบ `BUILD_SHA` ออกจาก `.env.example` (config มี default `dev` อยู่แล้ว) ในการ์ด/PR ถัดไปที่แตะไฟล์นี้
 - Options: (ก) ลบออก — ค่าระบุตัว build ควรมาจาก build เท่านั้น (ข) คงไว้และแก้คำสั่ง smoke ของการ์ด — แนะนำ: (ก)
 - Answer:
+
+## Q-0016 · T-0007 ต้องแก้ `apps/api/test/config.test.ts` ซึ่งไม่อยู่ใน allowed_paths
+- Status: open
+- Raised by: claude · T-0007 · 2026-10-20
+- Context: การ์ดเพิ่ม `DATABASE_PLATFORM_URL` และ `BETTER_AUTH_SECRET` เป็น key บังคับใน `config.ts` → fixture ใน `config.test.ts` (จาก T-0002) ต้องมี 2 key นี้ ไม่งั้น test เดิมล้ม; การ์ดลืมใส่ path นี้ (ผู้เขียนการ์ดพลาด) — `pnpm verify` ผ่าน แต่ task scope check ไม่ผ่าน
+- Question: เพิ่ม `apps/api/test/config.test.ts` ใน allowed_paths ของ T-0007
+- Options: (ก) เพิ่ม (PR กระบวนการแยก) (ข) ทำให้ key ใหม่เป็น optional — ไม่ควร เพราะ session secret ต้องบังคับ — แนะนำ: (ก)
+- Answer:
