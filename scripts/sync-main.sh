@@ -8,16 +8,19 @@ set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
 git config rerere.enabled true   # remember manual resolutions so the same conflict is not solved twice
-git config rerere.autoupdate true
+git config rerere.autoupdate true   # paths rerere resolves are staged, so only real conflicts stay unmerged
+pending="$(git rev-parse --absolute-git-dir)/sync-main-pending"
+if [[ -f "$pending" ]]; then
+  echo "a previous sync left work to finish: $(cat "$pending")" >&2
+  echo "finish it, commit, then: rm \"$pending\" and re-run" >&2
+  exit 1
+fi
 
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || { echo "working tree has uncommitted changes — commit first" >&2; exit 1; }
 git fetch -q origin main
 if git merge-base --is-ancestor origin/main HEAD; then
   echo "already up to date with origin/main"
-  exit 0
-fi
-
-if git merge --no-edit origin/main; then
+elif git merge --no-edit origin/main; then
   echo "merged origin/main cleanly"
 else
   lock=0 mig=0 other=()
@@ -28,16 +31,12 @@ else
       *) other+=("$f") ;;
     esac
   done < <(git diff --name-only --diff-filter=U)
-  # rerere may already have resolved some of them
-  remaining=()
-  for f in "${other[@]+"${other[@]}"}"; do
-    if grep -qE '^(<<<<<<<|>>>>>>>) ' "$f" 2>/dev/null; then remaining+=("$f"); else git add "$f"; fi
-  done
-  if ((${#remaining[@]})); then
+  # Every other unmerged path (text, binary, modify/delete) needs a decision — never pick a side silently.
+  if ((${#other[@]})); then
     echo "conflicts that need a manual resolution (explain them in a PR comment):" >&2
-    printf '  %s\n' "${remaining[@]}" >&2
-    ((lock)) && echo "  (pnpm-lock.yaml: after fixing the files above, run: git checkout --theirs pnpm-lock.yaml && pnpm install)" >&2
-    ((mig)) && echo "  (migrations: see the migration recipe in this script)" >&2
+    printf '  %s\n' "${other[@]}" >&2
+    if ((lock)); then echo "  (pnpm-lock.yaml: after fixing the files above, run: git checkout --theirs pnpm-lock.yaml && pnpm install)" >&2; fi
+    if ((mig)); then echo "  (migrations: see the migration recipe in this script)" >&2; fi
     echo "merge left in progress — resolve, git add, git commit; or abort with: git merge --abort" >&2
     exit 1
   fi
@@ -55,7 +54,7 @@ else
     git checkout --theirs -- pnpm-lock.yaml
     git add pnpm-lock.yaml
   fi
-  ((mig)) && git add -A packages/db/migrations
+  if ((mig)); then git add -A packages/db/migrations; fi
   # finish the merge with main's mechanical files, then regenerate on top
   git commit --no-edit -q
   if ((lock)); then
@@ -68,11 +67,18 @@ else
     git add packages/db/migrations
     git diff --cached --quiet || git commit -q -m "chore(db): regenerate migration after merging main"
     # Same SQL under a new number = done. Anything else (custom/RLS migrations are not generated) needs a look.
-    new=$(git diff --name-only --diff-filter=A origin/main HEAD -- 'packages/db/migrations/*.sql')
-    # shellcheck disable=SC2086
-    if [[ "$(cat "$backup"/*.sql 2>/dev/null)" != "$(cat $new 2>/dev/null)" ]]; then
-      echo "regenerated migration differs from the branch's old one (old copies: $backup)." >&2
-      echo "re-create custom SQL with: pnpm --filter @app/db exec drizzle-kit generate --custom --name <name>, then commit and re-run." >&2
+    old_sql="" new_sql=""
+    for f in "$backup"/*.sql; do
+      if [[ -f "$f" ]]; then old_sql+="$(cat "$f")"; fi
+    done
+    while IFS= read -r f; do
+      if [[ -n "$f" ]]; then new_sql+="$(cat "$f")"; fi
+    done \
+      < <(git diff --name-only --diff-filter=A origin/main HEAD -- 'packages/db/migrations/*.sql')
+    if [[ -z "$new_sql" || "$old_sql" != "$new_sql" ]]; then
+      echo "migration regenerated after merging main; old copies in $backup" >"$pending"
+      echo "regenerated migration is missing or differs from the branch's old one (old copies: $backup)." >&2
+      echo "re-create custom SQL with: pnpm --filter @app/db exec drizzle-kit generate --custom --name <name>, then commit, rm $pending and re-run." >&2
       exit 1
     fi
   fi

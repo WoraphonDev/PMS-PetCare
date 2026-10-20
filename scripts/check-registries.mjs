@@ -32,6 +32,7 @@ export function checkRegistry(kind, text) {
     const keys = [];
     for (const e of entries) {
       if (!e.endsWith(",")) errors.push(`module entry needs a trailing comma: ${e}`);
+      else if (!/^(\.\.\.)?[A-Za-z_$][\w$.]*,$/.test(e)) errors.push(`one module per line: ${e}`);
       if (!e.startsWith("...")) keys.push(e.replace(/,$/, ""));
     }
     if (entries.findIndex((e) => e.startsWith("...")) !== -1 && !entries.at(-1).startsWith("..."))

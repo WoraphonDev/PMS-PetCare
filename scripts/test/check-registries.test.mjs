@@ -22,6 +22,8 @@ test("modules: one per line, sorted, trailing commas, spread last", () => {
   assert.match(checkRegistry("modules", mods("      AModule,\n      BModule"))[0], /trailing comma/);
   assert.match(checkRegistry("modules", mods("      ...extra,\n      AModule,"))[0], /spread/);
   assert.match(checkRegistry("modules", "    imports: [AModule, BModule],\n")[0], /one module per line/);
+  assert.match(checkRegistry("modules", mods("      ZModule, AModule,"))[0], /one module per line: ZModule, AModule,/);
+  assert.match(checkRegistry("modules", mods("      AModule,\n      ...extra, ZModule,")).join(), /one module per line/);
 });
 
 test("the repository's registries are sorted", () => {
