@@ -27,6 +27,12 @@ jobs:
         run: node scripts/check-task-scope.mjs
         env:
           BASE_REF: origin/${{ github.base_ref }}
+      - name: guard script tests
+        run: pnpm test:scripts
+      - name: questions format (docs/questions/*.md)
+        run: node scripts/questions-index.mjs --check
+      - name: registry files sorted, one entry per line
+        run: node scripts/check-registries.mjs
       - name: pnpm verify
         run: pnpm verify
       - name: no skipped/focused tests added

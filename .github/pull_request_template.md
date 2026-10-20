@@ -16,7 +16,7 @@
 - [ ] No new `.skip` / `.only` / `.todo`, no weakened assertions
 
 ## Questions raised
-- Q-____ (docs/questions.md) or "none"
+- `docs/questions/T-____-__.md` or "none"
 
 ## Review (by the *other* agent; human when card has `human_review: true`)
 - [ ] Matches the cited spec field by field

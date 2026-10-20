@@ -46,6 +46,8 @@ const toRe = (glob) => {
   );
 };
 const allowRes = allowed.map(toRe);
+const ownLog = `docs/tasks/log/${taskId}.md`;
+const OWN_QUESTION_RE = new RegExp(`^docs/questions/${taskId}-\\d{2}\\.md$`);
 const FORBIDDEN = [
   [/^docs\/spec\//, "spec is read-only"],
   [/^docs\/adr\//, "ADRs are decided by humans"],
@@ -71,11 +73,14 @@ const journalAppendError = (file, ref) => {
 const violations = [];
 for (const { status, file, from } of changes) {
   if (from) violations.push(`${file}: renames are not allowed in task PRs (from ${from})`);
-  if (file === "docs/questions.md") continue;
+  // Shared append-only files caused most merge conflicts: questions and the agent log are one file per card instead.
+  if ((file === ownLog || OWN_QUESTION_RE.test(file)) && status !== "D") continue;
   if (file === card) {
-    const cut = "## Status log";
-    const before = sh(`git show ${mergeBase}:${card}`).split(cut)[0];
-    if (readFileSync(card, "utf8").split(cut)[0] !== before) violations.push(`${card}: only the '${cut}' section may change`);
+    violations.push(`${card}: the card is written by humans only — log progress in ${ownLog}`);
+    continue;
+  }
+  if (file.startsWith("docs/questions")) {
+    violations.push(`${file}: write questions only as docs/questions/${taskId}-NN.md`);
     continue;
   }
   const forb = FORBIDDEN.find(([re]) => re.test(file));
@@ -84,7 +89,7 @@ for (const { status, file, from } of changes) {
     continue;
   }
   if (file.startsWith("docs/tasks/")) {
-    violations.push(`${file}: other task cards are read-only`);
+    violations.push(`${file}: other task cards and logs are read-only`);
     continue;
   }
   if (JOURNAL_RE.test(file) && status === "M") {
@@ -103,7 +108,7 @@ if (violations.length) {
   console.error(`task scope FAILED for ${taskId} (${changes.length} changed files):`);
   for (const v of violations) console.error(`  - ${v}`);
   console.error(
-    `allowed_paths:\n${allowed.map((a) => `  ${a}`).join("\n")}\nIf you really need another file: stop and write docs/questions.md.`,
+    `allowed_paths:\n${allowed.map((a) => `  ${a}`).join("\n")}\nIf you really need another file: stop and write docs/questions/${taskId}-NN.md.`,
   );
   process.exit(1);
 }

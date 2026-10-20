@@ -11,7 +11,8 @@
     "format": "biome check --write .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test",
+    "test:scripts": "node --test 'scripts/test/*.test.mjs'"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

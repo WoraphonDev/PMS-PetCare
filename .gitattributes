@@ -1,0 +1,3 @@
+# Generated files: collapsed in GitHub diffs, never resolved by hand on conflict (scripts/sync-main.sh regenerates them).
+pnpm-lock.yaml -diff linguist-generated
+packages/db/migrations/meta/*.json linguist-generated

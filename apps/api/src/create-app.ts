@@ -49,7 +49,13 @@ function rootModule(config: Config, infra: Infra, ownsInfra: boolean, extra: Arr
   class CoreModule {}
   return {
     module: CoreModule,
-    imports: [SystemModule, IdentityModule, ...extra],
+    // Registry: one module per line, alphabetical (scripts/check-registries.mjs) so parallel cards merge cleanly.
+    // biome-ignore format: keep one entry per line
+    imports: [
+      IdentityModule,
+      SystemModule,
+      ...extra,
+    ],
     providers: [
       { provide: CONFIG, useValue: config },
       { provide: CLOCK, useValue: systemClock },
