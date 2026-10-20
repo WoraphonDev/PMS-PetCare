@@ -5,9 +5,11 @@ import { type DynamicModule, Global, Module, type Type } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { CLOCK, CONFIG } from "./common/context";
+import { createInfra, type Infra, InfraLifecycle, PLATFORM_DB, RUNTIME_DB, VALKEY } from "./common/db";
 import { ErrorFilter } from "./common/error.filter";
 import { requestIdFrom } from "./common/request-id";
 import type { Config } from "./config";
+import { IdentityModule } from "./modules/identity";
 import { SystemModule } from "./modules/system/system.module";
 
 // Logged objects never carry credentials (AGENTS.md rule 9).
@@ -26,25 +28,30 @@ export function withoutQuery(url: string): string {
   return i === -1 ? url : `${url.slice(0, i)}?[REDACTED]`;
 }
 
-function rootModule(config: Config, extra: Array<Type | DynamicModule>): DynamicModule {
+// ownsInfra: close connections on shutdown only when createApp opened them (tests pass and close their own).
+function rootModule(config: Config, infra: Infra, ownsInfra: boolean, extra: Array<Type | DynamicModule>): DynamicModule {
   @Global()
   @Module({})
   class CoreModule {}
   return {
     module: CoreModule,
-    imports: [SystemModule, ...extra],
+    imports: [SystemModule, IdentityModule, ...extra],
     providers: [
       { provide: CONFIG, useValue: config },
       { provide: CLOCK, useValue: systemClock },
+      { provide: RUNTIME_DB, useValue: infra.runtimeDb },
+      { provide: PLATFORM_DB, useValue: infra.platformDb },
+      { provide: VALKEY, useValue: infra.valkey },
+      ...(ownsInfra ? [InfraLifecycle] : []),
     ],
-    exports: [CONFIG, CLOCK],
+    exports: [CONFIG, CLOCK, RUNTIME_DB, PLATFORM_DB, VALKEY],
     global: true,
   };
 }
 
 export async function createApp(
   config: Config,
-  opts: { extraModules?: Array<Type | DynamicModule>; logger?: boolean; logStream?: { write(line: string): void } } = {},
+  opts: { extraModules?: Array<Type | DynamicModule>; logger?: boolean; logStream?: { write(line: string): void }; infra?: Infra } = {},
 ): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({
     genReqId: (req: { headers: Record<string, string | string[] | undefined> }) => requestIdFrom(req.headers),
@@ -58,9 +65,13 @@ export async function createApp(
             ...(opts.logStream ? { stream: opts.logStream } : {}),
           },
   });
-  const app = await NestFactory.create<NestFastifyApplication>(rootModule(config, opts.extraModules ?? []), adapter, {
-    logger: opts.logger === false || opts.logStream ? false : undefined,
-  });
+  const app = await NestFactory.create<NestFastifyApplication>(
+    rootModule(config, opts.infra ?? createInfra(config), !opts.infra, opts.extraModules ?? []),
+    adapter,
+    {
+      logger: opts.logger === false || opts.logStream ? false : undefined,
+    },
+  );
   app.setGlobalPrefix("api/v1");
   app.useGlobalFilters(new ErrorFilter());
   // Request id + Helmet first: CORS answers preflight requests itself, and those responses need both too.
