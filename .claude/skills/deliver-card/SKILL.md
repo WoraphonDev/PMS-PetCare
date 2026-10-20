@@ -13,6 +13,10 @@ Run the whole card workflow yourself. The human should only need to answer quest
 - `depends_on` not merged → stop and tell the user which.
 - `owner: human` → stop.
 
+## 1.5 Which agent is Dev
+
+Default: you (Claude) are Dev, Codex reviews. If you are near your usage limit, do not start the card — tell the human/orchestrator so Codex can be Dev (AGENTS.md *Agent fallback*); you will then be the reviewer. Every commit you make ends with the trailer line `Agent: claude`.
+
 ## 2. Implement (AGENTS.md "Workflow for every card")
 
 1. `git fetch && git checkout -b t-NNNN-<slug> origin/main`. Bring main in with `scripts/sync-main.sh` (never hand-merge `pnpm-lock.yaml` or migrations) — early and often: small conflicts now instead of one big one at the end.

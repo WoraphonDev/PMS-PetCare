@@ -53,6 +53,15 @@
 
 ระยะถัดไป (เมื่อ flow นิ่ง): ย้าย review loop ไป GitHub (Codex automatic review + Claude Code GitHub Action) — ต้องมี ADR แก้ไขก่อน
 
+### 2.3 สลับบทบาทเมื่อ Claude ใกล้ limit (เพิ่ม 2026-10-20)
+
+ค่าเริ่มต้น: Claude Code = Dev, Codex = Reviewer. เมื่อ Claude ใกล้/ถึง usage limit → **Codex เป็น Dev, Claude Code เป็น Reviewer** ด้วย workflow และ gate ชุดเดิมทั้งหมด
+
+- เลือก Dev agent ตอนเริ่มการ์ด แล้วใช้ตัวเดิมจนจบ PR — ห้ามสลับกลาง PR (ถ้า Dev หมด quota กลางทาง: บันทึก log แล้วรอ)
+- ทุก commit มี trailer `Agent: claude` / `Agent: codex` → `scripts/agent-review.sh` เลือก reviewer เป็นอีกตัวโดยอัตโนมัติ; branch ที่มี commit จากทั้งสองตัว → ไม่มี reviewer อิสระ → หยุดถามมนุษย์
+- Reviewer หมด quota → รอ ห้าม review ตัวเองหรือข้าม review
+- Claude Code ตอน review รันแบบ read-only (ไม่มี Edit/Write, shell เฉพาะ git/grep/cat/ls) เทียบเท่า `codex exec --sandbox read-only`
+
 ### 3. Gate ที่บังคับด้วยระบบ (ไม่ใช่ด้วยความสมัครใจของ agent)
 
 1. **Branch protection บน `main`:** ต้องผ่าน CI (`verify`), conversation resolve ครบ, ห้าม push ตรง / force-push; cross-agent review เป็น comment (agent ใช้บัญชี GitHub เดียวกับมนุษย์ จึงนับเป็น approval ไม่ได้)
