@@ -13,6 +13,7 @@ import { PLATFORM_DB } from "../../common/db";
 import { ZodBody } from "../../common/zod.pipe";
 import { AUTH, type Auth, toHeaders } from "./auth";
 import { type AuthedRequest, AuthGuard } from "./auth.guard";
+import { BACKGROUND, type BackgroundWork } from "./background";
 import { type FailureLimiter, FORGOT_LIMITER, LOGIN_LIMITER } from "./rate-limit";
 import { authLogin } from "./use-cases/auth.login";
 import { authLogout } from "./use-cases/auth.logout";
@@ -33,6 +34,7 @@ export class IdentityController {
     @Inject(LOGIN_LIMITER) private readonly limiter: FailureLimiter,
     @Inject(FORGOT_LIMITER) private readonly forgotLimiter: FailureLimiter,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(BACKGROUND) private readonly background: BackgroundWork,
   ) {}
 
   @Post("auth/login")
@@ -65,7 +67,12 @@ export class IdentityController {
     @Body(new ZodBody(AuthPasswordForgotRequest)) body: AuthPasswordForgotRequest,
     @Req() req: { ip: string },
   ): Promise<void> {
-    await authPasswordForgot({ ip: req.ip }, body, { auth: this.auth, platformDb: this.platformDb, limiter: this.forgotLimiter });
+    await authPasswordForgot({ ip: req.ip }, body, {
+      auth: this.auth,
+      platformDb: this.platformDb,
+      limiter: this.forgotLimiter,
+      background: this.background,
+    });
   }
 
   @Post("auth/password/reset")

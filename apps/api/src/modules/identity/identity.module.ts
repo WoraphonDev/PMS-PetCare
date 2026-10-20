@@ -7,6 +7,7 @@ import type { Config } from "../../config";
 import { EMAIL_SENDER, EmailModule, type EmailSender } from "../notification/email";
 import { AUTH, createAuth } from "./auth";
 import { AuthGuard } from "./auth.guard";
+import { BACKGROUND, BackgroundWork } from "./background";
 import { IdentityController } from "./identity.controller";
 import { FORGOT_LIMITER, forgotLimiter, LOGIN_LIMITER, loginLimiter } from "./rate-limit";
 
@@ -21,6 +22,7 @@ import { FORGOT_LIMITER, forgotLimiter, LOGIN_LIMITER, loginLimiter } from "./ra
     },
     { provide: LOGIN_LIMITER, inject: [VALKEY], useFactory: (valkey: Valkey) => loginLimiter(valkey) },
     { provide: FORGOT_LIMITER, inject: [VALKEY], useFactory: (valkey: Valkey) => forgotLimiter(valkey) },
+    { provide: BACKGROUND, useValue: new BackgroundWork() },
     AuthGuard,
   ],
   exports: [AUTH, AuthGuard],

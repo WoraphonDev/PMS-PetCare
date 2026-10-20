@@ -19,6 +19,51 @@ export async function clearMustChangePassword(platformDb: Db, userId: string): P
   await platformDb.$client.query(`update "user" set must_change_password = false where id = $1`, [userId]);
 }
 
+/**
+ * F11 + foundation §6 in ONE transaction: consume the single-use token (only if not expired at `now`), set the new
+ * password hash, revoke every session and write the `auth.password_reset` audit row. Returns the user id, or null when
+ * the token is wrong / expired / used (nothing changed). Raw SQL on one pooled client — Better Auth's resetPassword
+ * runs its own writes outside our transaction.
+ */
+export async function resetPasswordWithToken(
+  platformDb: Db,
+  input: { token: string; passwordHash: string; now: Date; ip: string | null; userAgent: string | null },
+): Promise<string | null> {
+  const client = await platformDb.$client.connect();
+  try {
+    await client.query("begin");
+    const consumed = await client.query<{ value: string }>(
+      "delete from verification where identifier = $1 and expires_at > $2 returning value",
+      [`reset-password:${input.token}`, input.now],
+    );
+    const userId = consumed.rows[0]?.value;
+    const updated = userId
+      ? await client.query(`update account set password = $1, updated_at = $2 where user_id = $3 and provider_id = 'credential'`, [
+          input.passwordHash,
+          input.now,
+          userId,
+        ])
+      : null;
+    if (!userId || updated?.rowCount !== 1) {
+      await client.query("rollback");
+      return null;
+    }
+    await client.query("delete from session where user_id = $1", [userId]);
+    await client.query(
+      `insert into audit_log (org_id, actor_user_id, action, entity_type, entity_id, ip, user_agent, occurred_at)
+       values (null, $1, 'auth.password_reset', 'user', $1, $2, $3, $4)`,
+      [userId, input.ip, input.userAgent, input.now],
+    );
+    await client.query("commit");
+    return userId;
+  } catch (err) {
+    await client.query("rollback").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 /** F09: a managed account is usable only while its membership in the owning org is active. */
 export async function isManagedAccountActive(platformDb: Db, u: UserRow): Promise<boolean> {
   const orgId = u.managedByOrgId;

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { organization, withTenant } from "@app/db";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { AUTH, type Auth } from "../../src/modules/identity";
+import { AUTH, type Auth, BACKGROUND, type BackgroundWork } from "../../src/modules/identity";
 import { EMAIL_SENDER, FakeEmailSender } from "../../src/modules/notification/email";
 import { bootTestApp, testConfig } from "../support/app";
 import { createTestInfra, type TestInfra } from "../support/infra";
@@ -11,6 +11,7 @@ let infra: TestInfra;
 let app: NestFastifyApplication;
 let auth: Auth;
 let mail: FakeEmailSender;
+let background: BackgroundWork;
 const logs: string[] = [];
 const PASSWORD = "correct-horse-1";
 const NEW_PASSWORD = "battery-staple-2";
@@ -31,6 +32,12 @@ async function signUp(email: string, username?: string) {
 
 const post = (url: string, payload: unknown, headers: Record<string, string> = {}, remoteAddress = nextIp()) =>
   app.inject({ method: "POST", url: `/api/v1${url}`, payload: payload as object, headers, remoteAddress });
+/** forgot answers before the email is sent (background) — wait for it so the outbox of the fake can be checked. */
+async function forgot(email: string, remoteAddress = nextIp()) {
+  const res = await post("/auth/password/forgot", { email }, {}, remoteAddress);
+  await background.idle();
+  return res;
+}
 const login = (identifier: string, password = PASSWORD) => post("/auth/login", { identifier, password });
 const cookieOf = (res: { headers: Record<string, unknown> }) =>
   ([] as string[])
@@ -53,6 +60,7 @@ beforeAll(async () => {
   app = await bootTestApp([], { write: (l) => logs.push(l) }, infra);
   auth = app.get<Auth>(AUTH);
   mail = app.get<FakeEmailSender>(EMAIL_SENDER);
+  background = app.get<BackgroundWork>(BACKGROUND);
   await withTenant(infra.runtimeDb, ORG, (tx) => tx.insert(organization).values({ id: ORG, slug: "shop-pw", displayName: "shop" }));
 }, 180_000);
 
@@ -75,7 +83,7 @@ describe("auth.passwordForgot", () => {
   it("existing email user → 204 and one email with the reset link", async () => {
     await signUp("forgot@example.com");
     const before = mail.sent.length;
-    const res = await post("/auth/password/forgot", { email: "Forgot@Example.com" });
+    const res = await forgot("Forgot@Example.com");
     expect(res.statusCode).toBe(204);
     expect(res.body).toBe("");
     expect(mail.sent.length).toBe(before + 1);
@@ -85,7 +93,7 @@ describe("auth.passwordForgot", () => {
 
   it("unknown email → 204, no email", async () => {
     const before = mail.sent.length;
-    const res = await post("/auth/password/forgot", { email: "nobody@example.com" });
+    const res = await forgot("nobody@example.com");
     expect(res.statusCode).toBe(204);
     expect(mail.sent.length).toBe(before);
   });
@@ -95,7 +103,7 @@ describe("auth.passwordForgot", () => {
     const u = await signUp(email, "managed.pw");
     await sql(`update "user" set is_managed = true, managed_by_org_id = $1 where id = $2`, [ORG, u.id]);
     const before = mail.sent.length;
-    const res = await post("/auth/password/forgot", { email });
+    const res = await forgot(email);
     expect(res.statusCode).toBe(204);
     expect(mail.sent.length).toBe(before);
   });
@@ -104,13 +112,37 @@ describe("auth.passwordForgot", () => {
     await signUp("limit@example.com");
     const addr = nextIp();
     const before = mail.sent.length;
-    for (let i = 0; i < 3; i++)
-      expect((await post("/auth/password/forgot", { email: "limit@example.com" }, {}, addr)).statusCode).toBe(204);
+    for (let i = 0; i < 3; i++) expect((await forgot("limit@example.com", addr)).statusCode).toBe(204);
     expect(mail.sent.length).toBe(before + 3);
-    expect((await post("/auth/password/forgot", { email: "LIMIT@example.com" }, {}, addr)).statusCode).toBe(204);
+    expect((await forgot("LIMIT@example.com", addr)).statusCode).toBe(204);
     expect(mail.sent.length).toBe(before + 3);
-    expect((await post("/auth/password/forgot", { email: "limit@example.com" }, {}, nextIp())).statusCode).toBe(204);
+    expect((await forgot("limit@example.com", nextIp())).statusCode).toBe(204);
     expect(mail.sent.length).toBe(before + 4);
+  });
+
+  it("concurrent requests cannot exceed 3 emails per email + IP", async () => {
+    await signUp("burst@example.com");
+    const addr = nextIp();
+    const before = mail.sent.length;
+    const all = await Promise.all(Array.from({ length: 6 }, () => post("/auth/password/forgot", { email: "burst@example.com" }, {}, addr)));
+    await background.idle();
+    expect(all.every((r) => r.statusCode === 204)).toBe(true);
+    expect(mail.sent.length).toBe(before + 3);
+  });
+
+  it("answers without waiting for the email, so timing does not reveal the account", async () => {
+    await signUp("slowmail@example.com");
+    mail.delayMs = 1500;
+    try {
+      const started = Date.now();
+      const res = await post("/auth/password/forgot", { email: "slowmail@example.com" });
+      expect(res.statusCode).toBe(204);
+      expect(Date.now() - started).toBeLessThan(1000);
+      await background.idle();
+      expect(mail.sent.at(-1)?.to).toBe("slowmail@example.com");
+    } finally {
+      mail.delayMs = 0;
+    }
   });
 
   it("invalid body → 400 VALIDATION_FAILED", async () => {
@@ -127,7 +159,7 @@ describe("auth.passwordReset", () => {
     const s2 = cookieOf(await login("reset@example.com"));
     expect((await me(s1)).statusCode).toBe(200);
 
-    await post("/auth/password/forgot", { email: "reset@example.com" });
+    await forgot("reset@example.com");
     const res = await post("/auth/password/reset", { token: tokenFromMail("reset@example.com"), password: NEW_PASSWORD });
     expect(res.statusCode).toBe(204);
 
@@ -144,7 +176,7 @@ describe("auth.passwordReset", () => {
 
   it("a used token → 400 VALIDATION_FAILED with details.fields.token", async () => {
     await signUp("reuse@example.com");
-    await post("/auth/password/forgot", { email: "reuse@example.com" });
+    await forgot("reuse@example.com");
     const token = tokenFromMail("reuse@example.com");
     expect((await post("/auth/password/reset", { token, password: NEW_PASSWORD })).statusCode).toBe(204);
     const again = await post("/auth/password/reset", { token, password: "another-pass-3" });
@@ -155,7 +187,7 @@ describe("auth.passwordReset", () => {
 
   it("an expired token (older than 1 hour) → 400 VALIDATION_FAILED with details.fields.token", async () => {
     await signUp("expired@example.com");
-    await post("/auth/password/forgot", { email: "expired@example.com" });
+    await forgot("expired@example.com");
     const token = tokenFromMail("expired@example.com");
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.now() + 61 * 60 * 1000);
@@ -164,6 +196,25 @@ describe("auth.passwordReset", () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error.details.fields.token).toBeDefined();
     expect((await login("expired@example.com", PASSWORD)).statusCode).toBe(200);
+  });
+
+  it("is atomic: if the audit insert fails, password, sessions and token stay unchanged", async () => {
+    await signUp("atomic@example.com");
+    const cookie = cookieOf(await login("atomic@example.com"));
+    await forgot("atomic@example.com");
+    const token = tokenFromMail("atomic@example.com");
+    const admin = (q: string) => infra.db.migratorDb.$client.query(q);
+    await admin(`create function test_fail_audit() returns trigger language plpgsql as $$ begin raise exception 'injected'; end $$`);
+    await admin(`create trigger test_fail_audit before insert on audit_log for each row execute function test_fail_audit()`);
+    try {
+      expect((await post("/auth/password/reset", { token, password: NEW_PASSWORD })).statusCode).toBe(500);
+    } finally {
+      await admin("drop trigger test_fail_audit on audit_log");
+      await admin("drop function test_fail_audit()");
+    }
+    expect((await me(cookie)).statusCode).toBe(200);
+    expect((await login("atomic@example.com", PASSWORD)).statusCode).toBe(200);
+    expect((await post("/auth/password/reset", { token, password: NEW_PASSWORD })).statusCode).toBe(204);
   });
 
   it("a wrong token → 400 with details.fields.token", async () => {

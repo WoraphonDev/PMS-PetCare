@@ -27,6 +27,16 @@ export class FailureLimiter {
     await this.valkey.multi().set(key, 0, "EX", this.windowSeconds, "NX").incr(key).exec();
   }
 
+  /**
+   * Counts one attempt and says whether it is still within the limit — check and increment in one MULTI, so
+   * concurrent requests cannot all pass a separate check (password-forgot counts every request, not only failures).
+   */
+  async tryConsume(...parts: string[]): Promise<boolean> {
+    const key = this.key(parts);
+    const res = await this.valkey.multi().set(key, 0, "EX", this.windowSeconds, "NX").incr(key).exec();
+    return Number(res?.[1]?.[1]) <= this.limit;
+  }
+
   /** Seconds until the counter resets (-2 = no counter). For tests and diagnostics. */
   ttl(...parts: string[]): Promise<number> {
     return this.valkey.ttl(this.key(parts));
