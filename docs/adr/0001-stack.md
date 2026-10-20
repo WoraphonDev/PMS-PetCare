@@ -62,4 +62,4 @@ Keycloak (เมื่อต้องเป็น OIDC provider ให้พา�
 
 - type/schema ชุดเดียว (`packages/contracts`) ใช้ทั้ง API และ web — agent ทำ feature ครบทุกชั้นในภาษาเดียว
 - ต้องรักษาวินัย modular monolith (ADR-0002)
-- เพิ่ม dependency ต้องระบุใน *Dependencies* ของการ์ด และ license อยู่ใน allow-list: MIT, MIT-0, Apache-2.0, BSD-2/3, ISC, PostgreSQL, MPL-2.0 (อื่น ๆ → `docs/questions.md`)
+- เพิ่ม dependency ต้องระบุใน *Dependencies* ของการ์ด และ license อยู่ใน allow-list: MIT, MIT-0, Apache-2.0, BSD-2/3, ISC, PostgreSQL, MPL-2.0 (อื่น ๆ → เขียนคำถามใน `docs/questions/`)

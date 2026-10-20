@@ -15,12 +15,12 @@ Run the whole card workflow yourself. The human should only need to answer quest
 
 ## 2. Implement (AGENTS.md "Workflow for every card")
 
-1. `git fetch && git checkout -b t-NNNN-<slug> origin/main`
+1. `git fetch && git checkout -b t-NNNN-<slug> origin/main`. Later, to bring main in: `scripts/sync-main.sh` (never hand-merge `pnpm-lock.yaml` or migrations).
 2. Read the whole card, then only the *Read first* anchors.
 3. Size L → write the plan first (it goes into the PR description).
-4. Tests first, then code. Stay inside `allowed_paths`. Spec gap → `docs/questions.md` + stop that part.
+4. Tests first, then code. Stay inside `allowed_paths`. Spec gap → write `docs/questions/T-NNNN-NN.md` (one file per question) + stop that part.
 5. Run every *Done when* command + `pnpm verify` + `TASK_ID=T-NNNN node scripts/check-task-scope.mjs`. Fix until green.
-6. Append the card's *Status log*. Commit. Push. Open the PR with `.github/pull_request_template.md` filled in (real numbers, not estimates).
+6. Append to `docs/tasks/log/T-NNNN.md` (never edit the card — it is human-only). Commit. Push. Open the PR with `.github/pull_request_template.md` filled in (real numbers, not estimates).
 7. Wait for CI (`gh pr checks <n> --watch`).
 
 ## 3. Codex review loop (ADR-0006 — max 3 rounds)
@@ -33,8 +33,8 @@ For round = 1, 2, 3:
 4. Exit 2 → for every P0–P2 finding:
    - Agree → fix it (tests first if it is a test gap), staying in `allowed_paths`.
    - Disagree → reply on the PR with the concrete reason (spec anchor / test) — do not silently skip.
-   - `SPEC QUESTION:` → write `docs/questions.md`, do not guess.
-   Then re-run step 2.5 checks, append Status log ("review round N fixes"), commit, push, wait for CI, next round.
+   - `SPEC QUESTION:` → write `docs/questions/T-NNNN-NN.md`, do not guess.
+   Then re-run step 2.5 checks, append to `docs/tasks/log/T-NNNN.md` ("review round N fixes"), commit, push, wait for CI, next round.
    P3 findings: fix if trivial, otherwise list them in the hand-off.
 5. Exit 1 (no verdict / codex error) → retry once; still failing → stop and report.
 
@@ -55,7 +55,7 @@ Reply in Thai, short:
 
 - PR link, CI status, changed lines (excluding tests/lockfile/generated migrations)
 - Codex rounds: what it found and what you changed (one line each); open P3s; disagreements
-- Questions opened (Q-NNNN) or "ไม่มี"
+- Questions opened (`docs/questions/T-NNNN-NN.md`) or "ไม่มี"
 - Merge: "ติด `agent-approved` แล้ว — จะ merge อัตโนมัติ" or, for `human_review: true`, "การ์ดนี้แตะเงิน — ต้องให้คุณ review และ merge"
 - Next card(s) that become unblocked after this merge
 

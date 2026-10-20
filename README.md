@@ -17,7 +17,7 @@
 | [docs/adr/](docs/adr/) | การตัดสินใจเชิงสถาปัตยกรรม (stack, modular monolith, multi-tenancy, sync, ต้นทุน, agentic delivery) |
 | [docs/spec/](docs/spec/) | spec ของผลิตภัณฑ์ (เขียนทีละ feature) |
 | [docs/tasks/](docs/tasks/) | การ์ดงาน 1 ใบ = 1 PR |
-| [docs/questions.md](docs/questions.md) | คำถามที่รอเจ้าของผลิตภัณฑ์ตอบ |
+| [docs/questions/](docs/questions/README.md) | คำถามที่รอเจ้าของผลิตภัณฑ์ตอบ |
 
 ## เริ่มต้น
 

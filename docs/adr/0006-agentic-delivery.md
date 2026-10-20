@@ -67,8 +67,13 @@
 5. **Migration:** แบบ expand → migrate → contract เท่านั้น (ไม่ drop/rename ในขั้นเดียว), migration ที่ merge แล้วแก้ไม่ได้, backup อัตโนมัติก่อน migrate production
 6. **Rollback:** ทุก deploy เป็น image ที่มี tag ตาม commit; rollback = deploy tag ก่อนหน้า (pipeline มีปุ่มเดียว)
 7. **Feature flag** สำหรับ feature ที่ยังไม่พร้อม — merge ได้โดยไม่เปิดให้ผู้ใช้เห็น
+8. **ลด merge conflict** (เพิ่ม 2026-10-20): ไม่มีไฟล์รวมที่ทุก branch ต่อท้าย — คำถาม 1 ไฟล์ต่อคำถาม (`docs/questions/<card>-NN.md`),
+   log ของ agent 1 ไฟล์ต่อการ์ด (`docs/tasks/log/T-NNNN.md`, การ์ดเป็นของมนุษย์อย่างเดียว) — บังคับโดย task scope check;
+   CI ตรวจรูปแบบคำถาม (`scripts/questions-index.mjs --check`) และ registry (`schema/index.ts`, `contracts/src/index.ts`, module list ใน `create-app.ts`)
+   ต้องเป็น 1 รายการต่อบรรทัด เรียงตามตัวอักษร (`scripts/check-registries.mjs`);
+   lockfile / migration ที่ชนกันให้ tool สร้างใหม่ (`scripts/sync-main.sh`) ไม่แก้ด้วยมือ; script ใน `scripts/` มี test (`pnpm test:scripts`)
 
-### 4. Agent ต้องหยุดถาม (เขียน `docs/questions.md`) เมื่อ
+### 4. Agent ต้องหยุดถาม (เขียน `docs/questions/<card>-NN.md` — 1 คำถาม 1 ไฟล์) เมื่อ
 
 spec เงียบ/ขัดกัน · ต้องแก้ไฟล์นอก `allowed_paths` · test หรือ vector ดูผิด · ต้องเพิ่ม dependency ที่การ์ดไม่ได้ระบุ ·
 ต้องแตะ auth / เงิน / tenant ในแบบที่การ์ดไม่ได้บรรยาย
@@ -79,7 +84,7 @@ PR เป้าหมาย < 600 บรรทัด **ไม่นับ test**
 
 ## Consequences
 
-- มนุษย์ใช้เวลาไปกับ: อนุมัติ spec, ตอบ `docs/questions.md`, review การ์ดเรื่องเงิน, อนุมัติ production release
+- มนุษย์ใช้เวลาไปกับ: อนุมัติ spec, ตอบคำถามใน `docs/questions/`, review การ์ดเรื่องเงิน, อนุมัติ production release
 - ความเสี่ยงด้าน tenant/สิทธิ์ ฝากไว้กับ gate อัตโนมัติ — gate เหล่านี้ต้องสร้างในการ์ดแรก ๆ ก่อน feature ใด ๆ
 - CI ต้องเร็วและเชื่อถือได้ — test ที่ flaky ต้องแก้ทันที (มันคือ gate ของทั้งระบบ)
 - spec ทำทีละ feature ให้พอสำหรับการ์ดถัดไป ไม่ล็อกทั้งระบบล่วงหน้า (บทเรียนจาก PetBooking ที่ `questions.md` ยาว 1,500+ บรรทัด)

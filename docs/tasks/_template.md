@@ -46,4 +46,4 @@ pnpm verify
 
 ## Status log
 
-<!-- agent: เพิ่มบรรทัด `YYYY-MM-DD · <agent> · ทำอะไร · คำถามที่เปิด` -->
+agent บันทึกใน `docs/tasks/log/T-NNNN.md` (บรรทัดละ `YYYY-MM-DD · <agent> · ทำอะไร · คำถามที่เปิด`) — ห้ามแก้ไฟล์การ์ดนี้
