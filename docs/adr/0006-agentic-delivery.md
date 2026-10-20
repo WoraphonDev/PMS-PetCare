@@ -72,6 +72,9 @@
    CI ตรวจรูปแบบคำถาม (`scripts/questions-index.mjs --check`) และ registry (`schema/index.ts`, `contracts/src/index.ts`, module list ใน `create-app.ts`)
    ต้องเป็น 1 รายการต่อบรรทัด เรียงตามตัวอักษร (`scripts/check-registries.mjs`);
    lockfile / migration ที่ชนกันให้ tool สร้างใหม่ (`scripts/sync-main.sh`) ไม่แก้ด้วยมือ; script ใน `scripts/` มี test (`pnpm test:scripts`)
+9. **Branch ต้องตามทัน main ก่อน merge** (branch protection `strict`): agent รัน `sync-main.sh` ตอนเริ่มการ์ด, ก่อน review แต่ละรอบ และก่อนติด `agent-approved`;
+   เมื่อ main ขยับ workflow `update-branch.yml` merge main เข้า PR ที่ติด `agent-approved` แล้ว dispatch CI ให้ (merge ด้วย `GITHUB_TOKEN` ไม่ trigger `pull_request`)
+   — ชนกัน → ถอด label + comment ให้ agent sync เอง; จับ conflict เชิงความหมาย (merge ได้แต่ test พัง) ก่อน merge จริง
 
 ### 4. Agent ต้องหยุดถาม (เขียน `docs/questions/<card>-NN.md` — 1 คำถาม 1 ไฟล์) เมื่อ
 
