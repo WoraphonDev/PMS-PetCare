@@ -33,8 +33,13 @@ export async function authLogin(
   };
 
   const u = await findUserByIdentifier(deps.platformDb, identifier);
-  // Same response whether the account is missing, disabled or the password is wrong.
-  if (!u || !(await isManagedAccountActive(deps.platformDb, u))) throw await fail();
+  // A disabled managed account (F09) must cost the same as a wrong password, so timing does not reveal it:
+  // hash the presented password, then fail. Unknown identifiers go through Better Auth's sign-in, which already
+  // runs a dummy hash for missing accounts.
+  if (u && !(await isManagedAccountActive(deps.platformDb, u))) {
+    await (await deps.auth.$context).password.hash(input.password);
+    throw await fail();
+  }
 
   const res = identifier.includes("@")
     ? await deps.auth.api.signInEmail({ body: { email: identifier, password: input.password }, headers: ctx.headers, asResponse: true })
@@ -45,6 +50,7 @@ export async function authLogin(
       });
   if (!res.ok) throw await fail();
 
+  if (!u) throw await fail(); // unreachable in practice: sign-in succeeded, so the user exists
   await deps.limiter.reset(identifier, ctx.ip);
   return {
     body: { twoFactorRequired: false, mustChangePassword: u.mustChangePassword },
