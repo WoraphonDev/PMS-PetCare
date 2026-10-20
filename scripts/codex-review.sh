@@ -21,7 +21,7 @@ You are the Reviewer agent for task card $card in this repository (see AGENTS.md
 Review ONLY the changes on this branch versus $base: run \`git diff $base...HEAD\` (and \`git diff --stat $base...HEAD\`) and read the changed files. Do not modify any files.
 Do not run the test suite or pnpm verify (CI already runs them on this branch); read-only commands such as git, grep and cat are fine.
 
-Read first: AGENTS.md, docs/tasks/$card.md (whole card; the agent's progress log is docs/tasks/log/$card.md, its questions docs/questions/$card-*.md), and only the spec/ADR anchors listed in the card's "Read first".
+Read first: AGENTS.md, docs/tasks/$card.md (whole card; the agent progress log is docs/tasks/log/$card.md, its questions docs/questions/$card-*.md), and only the spec/ADR anchors listed in the card's "Read first".
 
 Check, in order:
 1. Behaviour matches the cited spec field by field (names, types, nullability, error codes, HTTP status, Thai labels).
