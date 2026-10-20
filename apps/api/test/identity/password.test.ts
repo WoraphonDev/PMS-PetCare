@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { organization, withTenant } from "@app/db";
+import { Logger } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AUTH, type Auth, BACKGROUND, type BackgroundWork } from "../../src/modules/identity";
@@ -145,6 +146,22 @@ describe("auth.passwordForgot", () => {
     }
   });
 
+  it("a failed delivery is logged without the address, link or provider message", async () => {
+    await signUp("bounce@example.com");
+    const errors = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    mail.failWith = Object.assign(new Error("550 rejected <bounce@example.com> http://x/reset-password?token=abc"), { code: "EENVELOPE" });
+    try {
+      expect((await forgot("bounce@example.com")).statusCode).toBe(204);
+      const logged = JSON.stringify(errors.mock.calls);
+      expect(logged).toContain("EENVELOPE");
+      expect(logged).not.toContain("bounce@example.com");
+      expect(logged).not.toContain("token=");
+    } finally {
+      mail.failWith = null;
+      errors.mockRestore();
+    }
+  });
+
   it("invalid body → 400 VALIDATION_FAILED", async () => {
     const res = await post("/auth/password/forgot", { email: "not-an-email" });
     expect(res.statusCode).toBe(400);
@@ -261,6 +278,26 @@ describe("auth.passwordChange", () => {
     expect(mine.json().user.mustChangePassword).toBe(false);
     expect((await me(other)).statusCode).toBe(401);
     expect((await login("change.me", NEW_PASSWORD)).json().mustChangePassword).toBe(false);
+  });
+
+  it("is atomic: if clearing must_change_password fails, password and other sessions stay unchanged", async () => {
+    const u = await signUp("atomic-change@example.com");
+    const current = cookieOf(await login("atomic-change@example.com"));
+    const other = cookieOf(await login("atomic-change@example.com"));
+    const admin = (q: string) => infra.db.migratorDb.$client.query(q);
+    await admin(`create function test_fail_user() returns trigger language plpgsql as $$ begin raise exception 'injected'; end $$`);
+    await admin(
+      `create trigger test_fail_user before update on "user" for each row when (old.id = '${u.id}') execute function test_fail_user()`,
+    );
+    try {
+      const res = await post("/auth/password/change", { currentPassword: PASSWORD, newPassword: NEW_PASSWORD }, { cookie: current });
+      expect(res.statusCode).toBe(500);
+    } finally {
+      await admin(`drop trigger test_fail_user on "user"`);
+      await admin("drop function test_fail_user()");
+    }
+    expect((await me(other)).statusCode).toBe(200);
+    expect((await login("atomic-change@example.com", PASSWORD)).statusCode).toBe(200);
   });
 
   it("new password policy → 400 VALIDATION_FAILED on newPassword", async () => {

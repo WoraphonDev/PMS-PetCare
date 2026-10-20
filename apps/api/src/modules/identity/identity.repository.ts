@@ -14,54 +14,86 @@ export async function findUserById(db: Db, id: string): Promise<UserRow | undefi
   return db.query.user.findFirst({ where: (u, { eq }) => eq(u.id, id) });
 }
 
-/** Our column, not Better Auth's — cleared once the user has set a password of their own (F09). */
-export async function clearMustChangePassword(platformDb: Db, userId: string): Promise<void> {
-  await platformDb.$client.query(`update "user" set must_change_password = false where id = $1`, [userId]);
+/** The part of node-postgres' PoolClient used here (apps/api has no direct pg dependency). */
+interface PoolClient {
+  query<R = unknown>(text: string, values?: unknown[]): Promise<{ rows: R[]; rowCount: number | null }>;
+  release(): void;
 }
+/** Thrown inside `inTransaction` to roll back without an error reaching the caller. */
+const ROLLBACK = Symbol("rollback");
 
 /**
- * F11 + foundation §6 in ONE transaction: consume the single-use token (only if not expired at `now`), set the new
- * password hash, revoke every session and write the `auth.password_reset` audit row. Returns the user id, or null when
- * the token is wrong / expired / used (nothing changed). Raw SQL on one pooled client — Better Auth's resetPassword
- * runs its own writes outside our transaction.
+ * Raw SQL on one pooled client in one transaction. Password changes touch Better Auth's tables and ours together,
+ * and Better Auth's own endpoints commit separately — these helpers keep each change all-or-nothing.
  */
-export async function resetPasswordWithToken(
-  platformDb: Db,
-  input: { token: string; passwordHash: string; now: Date; ip: string | null; userAgent: string | null },
-): Promise<string | null> {
-  const client = await platformDb.$client.connect();
+async function inTransaction<T>(platformDb: Db, fn: (client: PoolClient) => Promise<T | typeof ROLLBACK>): Promise<T | null> {
+  const client = (await platformDb.$client.connect()) as unknown as PoolClient;
   try {
     await client.query("begin");
-    const consumed = await client.query<{ value: string }>(
-      "delete from verification where identifier = $1 and expires_at > $2 returning value",
-      [`reset-password:${input.token}`, input.now],
-    );
-    const userId = consumed.rows[0]?.value;
-    const updated = userId
-      ? await client.query(`update account set password = $1, updated_at = $2 where user_id = $3 and provider_id = 'credential'`, [
-          input.passwordHash,
-          input.now,
-          userId,
-        ])
-      : null;
-    if (!userId || updated?.rowCount !== 1) {
-      await client.query("rollback");
-      return null;
-    }
-    await client.query("delete from session where user_id = $1", [userId]);
-    await client.query(
-      `insert into audit_log (org_id, actor_user_id, action, entity_type, entity_id, ip, user_agent, occurred_at)
-       values (null, $1, 'auth.password_reset', 'user', $1, $2, $3, $4)`,
-      [userId, input.ip, input.userAgent, input.now],
-    );
-    await client.query("commit");
-    return userId;
+    const result = await fn(client);
+    await client.query(result === ROLLBACK ? "rollback" : "commit");
+    return result === ROLLBACK ? null : result;
   } catch (err) {
     await client.query("rollback").catch(() => undefined);
     throw err;
   } finally {
     client.release();
   }
+}
+
+const setPassword = (client: PoolClient, userId: string, passwordHash: string, now: Date) =>
+  client.query(`update account set password = $1, updated_at = $2 where user_id = $3 and provider_id = 'credential'`, [
+    passwordHash,
+    now,
+    userId,
+  ]);
+
+/** The stored hash of the user's email/username + password account (null for none). */
+export async function credentialHashOf(platformDb: Db, userId: string): Promise<string | null> {
+  const a = await platformDb.query.account.findFirst({
+    where: (a, { and, eq }) => and(eq(a.userId, userId), eq(a.providerId, "credential")),
+  });
+  return a?.password ?? null;
+}
+
+/**
+ * F11 + foundation §6: consume the single-use token (only if not expired at `now`), set the new password hash, revoke
+ * every session and write the `auth.password_reset` audit row — together. Returns the user id, or null when the token
+ * is wrong / expired / used (nothing changed).
+ */
+export function resetPasswordWithToken(
+  platformDb: Db,
+  input: { token: string; passwordHash: string; now: Date; ip: string | null; userAgent: string | null },
+): Promise<string | null> {
+  return inTransaction(platformDb, async (client) => {
+    const consumed = await client.query<{ value: string }>(
+      "delete from verification where identifier = $1 and expires_at > $2 returning value",
+      [`reset-password:${input.token}`, input.now],
+    );
+    const userId = consumed.rows[0]?.value;
+    if (!userId || (await setPassword(client, userId, input.passwordHash, input.now)).rowCount !== 1) return ROLLBACK;
+    await client.query("delete from session where user_id = $1", [userId]);
+    await client.query(
+      `insert into audit_log (org_id, actor_user_id, action, entity_type, entity_id, ip, user_agent, occurred_at)
+       values (null, $1, 'auth.password_reset', 'user', $1, $2, $3, $4)`,
+      [userId, input.ip, input.userAgent, input.now],
+    );
+    return userId;
+  });
+}
+
+/** #ep-auth.password_change: new hash, every other session revoked (current kept), must_change_password cleared — together. */
+export async function changePasswordKeepingSession(
+  platformDb: Db,
+  input: { userId: string; sessionId: string; passwordHash: string; now: Date },
+): Promise<boolean> {
+  const done = await inTransaction(platformDb, async (client) => {
+    if ((await setPassword(client, input.userId, input.passwordHash, input.now)).rowCount !== 1) return ROLLBACK;
+    await client.query("delete from session where user_id = $1 and id <> $2", [input.userId, input.sessionId]);
+    await client.query(`update "user" set must_change_password = false, updated_at = $2 where id = $1`, [input.userId, input.now]);
+    return true;
+  });
+  return done === true;
 }
 
 /** F09: a managed account is usable only while its membership in the owning org is active. */

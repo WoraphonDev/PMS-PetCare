@@ -96,7 +96,7 @@ export class IdentityController {
     @Req() req: AuthedRequest,
   ): Promise<void> {
     const user = req.user as NonNullable<AuthedRequest["user"]>;
-    await authPasswordChange({ headers: toHeaders(req.headers), userId: user.id }, body, {
+    await authPasswordChange({ now: this.clock.now(), userId: user.id, sessionId: req.sessionId as string }, body, {
       auth: this.auth,
       platformDb: this.platformDb,
     });
