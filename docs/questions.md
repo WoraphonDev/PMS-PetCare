@@ -132,17 +132,17 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Answer:
 
 ## Q-0016 · T-0007 ต้องแก้ `apps/api/test/config.test.ts` ซึ่งไม่อยู่ใน allowed_paths
-- Status: open
+- Status: answered
 - Raised by: claude · T-0007 · 2026-10-20
 - Context: การ์ดเพิ่ม `DATABASE_PLATFORM_URL` และ `BETTER_AUTH_SECRET` เป็น key บังคับใน `config.ts` → fixture ใน `config.test.ts` (จาก T-0002) ต้องมี 2 key นี้ ไม่งั้น test เดิมล้ม; การ์ดลืมใส่ path นี้ (ผู้เขียนการ์ดพลาด) — `pnpm verify` ผ่าน แต่ task scope check ไม่ผ่าน
 - Question: เพิ่ม `apps/api/test/config.test.ts` ใน allowed_paths ของ T-0007
 - Options: (ก) เพิ่ม (PR กระบวนการแยก) (ข) ทำให้ key ใหม่เป็น optional — ไม่ควร เพราะ session secret ต้องบังคับ — แนะนำ: (ก)
-- Answer:
+- Answer (WoraphonDev · 2026-10-20): (ก) อนุมัติ — PR #16 เพิ่ม `apps/api/test/config.test.ts` ใน allowed_paths ของ T-0007
 
 ## Q-0017 · T-0007 โค้ด 450 บรรทัด (เกิน 400, ไม่นับ test)
-- Status: open
+- Status: answered
 - Raised by: claude · T-0007 · 2026-10-20
 - Context: identity module ต้องมี Better Auth config, guard, controller, repository, limiter, infra providers, contracts พร้อมกัน — ถ้าแยก `me.get` ออก guard จะไม่มี endpoint ให้ทดสอบ
 - Question: รับ PR ขนาดนี้ หรือแยก
 - Options: (ก) รับ (ข) แยก infra providers (`common/db.ts`) + config เป็น PR ก่อน — แนะนำ: (ก); ผู้เขียนการ์ดจะแบ่งการ์ด API ต่อจากนี้ให้เล็กลง
-- Answer:
+- Answer (WoraphonDev · 2026-10-20): เพิ่มเกณฑ์ AGENTS.md rule 10 เป็น < 600 บรรทัด (ไม่นับ test, migration ที่ generate, lockfile) — T-0007 อยู่ในเกณฑ์ใหม่
