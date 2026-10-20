@@ -138,3 +138,11 @@ Agent เขียนคำถามที่นี่เมื่อ spec/ADR �
 - Question: เพิ่ม `apps/api/test/config.test.ts` ใน allowed_paths ของ T-0007
 - Options: (ก) เพิ่ม (PR กระบวนการแยก) (ข) ทำให้ key ใหม่เป็น optional — ไม่ควร เพราะ session secret ต้องบังคับ — แนะนำ: (ก)
 - Answer:
+
+## Q-0017 · T-0007 โค้ด 450 บรรทัด (เกิน 400, ไม่นับ test)
+- Status: open
+- Raised by: claude · T-0007 · 2026-10-20
+- Context: identity module ต้องมี Better Auth config, guard, controller, repository, limiter, infra providers, contracts พร้อมกัน — ถ้าแยก `me.get` ออก guard จะไม่มี endpoint ให้ทดสอบ
+- Question: รับ PR ขนาดนี้ หรือแยก
+- Options: (ก) รับ (ข) แยก infra providers (`common/db.ts`) + config เป็น PR ก่อน — แนะนำ: (ก); ผู้เขียนการ์ดจะแบ่งการ์ด API ต่อจากนี้ให้เล็กลง
+- Answer:
