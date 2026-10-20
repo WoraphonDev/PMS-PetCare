@@ -300,6 +300,31 @@ describe("auth.passwordChange", () => {
     expect((await login("atomic-change@example.com", PASSWORD)).statusCode).toBe(200);
   });
 
+  it("a reset that lands between verifying and saving wins: the change is refused (401), the reset password stays", async () => {
+    await signUp("race@example.com");
+    const cookie = cookieOf(await login("race@example.com"));
+    await forgot("race@example.com");
+    const token = tokenFromMail("race@example.com");
+    // Hold the change inside its hashing step (after the current password was verified) and run the reset there.
+    const ctx = await auth.$context;
+    const realHash = ctx.password.hash;
+    let resetDone: Promise<unknown> | undefined;
+    const spy = vi.spyOn(ctx.password, "hash").mockImplementationOnce(async (pw: string) => {
+      resetDone = post("/auth/password/reset", { token, password: "recovered-pass-9" });
+      await resetDone;
+      return realHash(pw);
+    });
+    try {
+      const res = await post("/auth/password/change", { currentPassword: PASSWORD, newPassword: NEW_PASSWORD }, { cookie });
+      expect(res.statusCode).toBe(401);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(((await resetDone) as { statusCode: number }).statusCode).toBe(204);
+    expect((await login("race@example.com", "recovered-pass-9")).statusCode).toBe(200);
+    expect((await login("race@example.com", NEW_PASSWORD)).statusCode).toBe(401);
+  });
+
   it("new password policy → 400 VALIDATION_FAILED on newPassword", async () => {
     await signUp("policy@example.com");
     const cookie = cookieOf(await login("policy@example.com"));

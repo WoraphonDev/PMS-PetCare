@@ -16,5 +16,5 @@ export async function authPasswordChange(
   const hash = await credentialHashOf(deps.platformDb, ctx.userId);
   if (!hash || !(await password.verify({ hash, password: input.currentPassword }))) throw invalid();
   const passwordHash = await password.hash(input.newPassword);
-  if (!(await changePasswordKeepingSession(deps.platformDb, { ...ctx, passwordHash }))) throw invalid();
+  if (!(await changePasswordKeepingSession(deps.platformDb, { ...ctx, verifiedHash: hash, passwordHash }))) throw invalid();
 }

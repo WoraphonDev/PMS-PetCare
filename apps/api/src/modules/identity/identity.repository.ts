@@ -82,13 +82,23 @@ export function resetPasswordWithToken(
   });
 }
 
-/** #ep-auth.password_change: new hash, every other session revoked (current kept), must_change_password cleared — together. */
+/**
+ * #ep-auth.password_change: new hash, every other session revoked (current kept), must_change_password cleared — together.
+ * Compare-and-swap: only if the stored hash is still the one the current password was verified against and the current
+ * session still exists — a reset that lands in between (new hash, all sessions revoked) wins. False = nothing changed.
+ */
 export async function changePasswordKeepingSession(
   platformDb: Db,
-  input: { userId: string; sessionId: string; passwordHash: string; now: Date },
+  input: { userId: string; sessionId: string; verifiedHash: string; passwordHash: string; now: Date },
 ): Promise<boolean> {
   const done = await inTransaction(platformDb, async (client) => {
-    if ((await setPassword(client, input.userId, input.passwordHash, input.now)).rowCount !== 1) return ROLLBACK;
+    const live = await client.query("select 1 from session where id = $1 and user_id = $2 for update", [input.sessionId, input.userId]);
+    if (live.rowCount !== 1) return ROLLBACK;
+    const swapped = await client.query(
+      `update account set password = $1, updated_at = $2 where user_id = $3 and provider_id = 'credential' and password = $4`,
+      [input.passwordHash, input.now, input.userId, input.verifiedHash],
+    );
+    if (swapped.rowCount !== 1) return ROLLBACK;
     await client.query("delete from session where user_id = $1 and id <> $2", [input.userId, input.sessionId]);
     await client.query(`update "user" set must_change_password = false, updated_at = $2 where id = $1`, [input.userId, input.now]);
     return true;
