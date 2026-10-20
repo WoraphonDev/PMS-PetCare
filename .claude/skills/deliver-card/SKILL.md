@@ -48,7 +48,7 @@ Only when CI is green, the last round is `CLEAN`, and every review thread is res
 - Card `human_review: true` → do **not** label; the human reviews and merges.
 
 Never run `gh pr merge` yourself. Pushing again after labelling removes the label — re-run the loop and label again.
-When main moves after labelling, the `update-branch` workflow merges main into the PR and re-runs CI (label kept). If that merge conflicts it removes the label and comments — then run `scripts/sync-main.sh`, push, review again, re-label.
+Branch protection requires the branch to be up to date with main. If main moves after labelling, the PR waits: run `scripts/sync-main.sh`, push (this drops the label), wait for CI, one more review round, re-label. (Automatic branch updates need the bot token from process-fixes PR 5.)
 
 ## 5. Hand-off to the human
 

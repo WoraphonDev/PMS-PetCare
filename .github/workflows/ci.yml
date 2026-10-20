@@ -3,9 +3,6 @@ on:
   pull_request:
   push:
     branches: [main]
-  # update-branch.yml merges main into approved PRs with GITHUB_TOKEN, which does not trigger pull_request runs —
-  # it dispatches this workflow on the PR branch instead, so the required `verify` check runs on the new head.
-  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -26,10 +23,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: task scope (task branches t-NNNN-*)
-        if: github.event_name != 'push'
+        if: github.event_name == 'pull_request'
         run: node scripts/check-task-scope.mjs
         env:
-          BASE_REF: origin/${{ github.base_ref || 'main' }}
+          BASE_REF: origin/${{ github.base_ref }}
       - name: guard script tests
         run: pnpm test:scripts
       - name: questions format (docs/questions/*.md)
@@ -39,7 +36,7 @@ jobs:
       - name: pnpm verify
         run: pnpm verify
       - name: no skipped/focused tests added
-        if: github.event_name != 'push'
+        if: github.event_name == 'pull_request'
         run: |
-          if git diff origin/${{ github.base_ref || 'main' }}...HEAD -U0 -- '*.test.ts' '*.test.tsx' '*.spec.ts' '*.e2e.ts' | grep -E '^\+.*\b(it|test|describe)\.(skip|only|todo)\(' ; then
+          if git diff origin/${{ github.base_ref }}...HEAD -U0 -- '*.test.ts' '*.test.tsx' '*.spec.ts' '*.e2e.ts' | grep -E '^\+.*\b(it|test|describe)\.(skip|only|todo)\(' ; then
             echo "::error::.skip/.only/.todo added — not allowed (AGENTS.md rule 4)"; exit 1; fi
