@@ -15,7 +15,7 @@ Run the whole card workflow yourself. The human should only need to answer quest
 
 ## 2. Implement (AGENTS.md "Workflow for every card")
 
-1. `git fetch && git checkout -b t-NNNN-<slug> origin/main`. Later, to bring main in: `scripts/sync-main.sh` (never hand-merge `pnpm-lock.yaml` or migrations).
+1. `git fetch && git checkout -b t-NNNN-<slug> origin/main`. Bring main in with `scripts/sync-main.sh` (never hand-merge `pnpm-lock.yaml` or migrations) — early and often: small conflicts now instead of one big one at the end.
 2. Read the whole card, then only the *Read first* anchors.
 3. Size L → write the plan first (it goes into the PR description).
 4. Tests first, then code. Stay inside `allowed_paths`. Spec gap → write `docs/questions/T-NNNN-NN.md` (one file per question) + stop that part.
@@ -27,7 +27,7 @@ Run the whole card workflow yourself. The human should only need to answer quest
 
 For round = 1, 2, 3:
 
-1. Run `scripts/codex-review.sh T-NNNN <round>` (takes minutes — run it in the background and wait for it).
+1. Run `scripts/sync-main.sh` (exit 1 → resolve the listed files first, explain them in a PR comment), push if it merged anything. Then run `scripts/codex-review.sh T-NNNN <round>` (takes minutes — run it in the background and wait for it).
 2. Post the review on the PR so it is traceable: `gh pr comment <n> --body-file "$(git rev-parse --absolute-git-dir)/agent-review/T-NNNN-round<round>.md"` (prefix the body with `**Codex review — round <round>**`).
 3. Exit 0 (`VERDICT: CLEAN`) → go to step 4.
 4. Exit 2 → for every P0–P2 finding:
@@ -42,12 +42,17 @@ After round 3 still `CHANGES_REQUESTED`, or any disagreement you could not settl
 
 ## 4. Approve for merge
 
-Only when CI is green, the last round is `CLEAN`, and every review thread is resolved:
+Only when CI is green, the last round is `CLEAN`, and every review thread is resolved. Run `scripts/sync-main.sh` once more right before labelling — if it merged anything, push and wait for CI (see *Syncing after CLEAN* below).
 
 - Card `human_review: false` → `gh pr edit <n> --add-label agent-approved`. The `auto-merge` workflow re-checks the card and merges after the required checks; watch for its comment if it refuses.
 - Card `human_review: true` → do **not** label; the human reviews and merges.
 
 Never run `gh pr merge` yourself. Pushing again after labelling removes the label — re-run the loop and label again.
+Branch protection requires the branch to be up to date with main. If main moves after labelling, the PR waits: run `scripts/sync-main.sh`, push (this drops the label), wait for CI, re-label per *Syncing after CLEAN*. (Automatic branch updates need the bot token from process-fixes PR 5.)
+
+**Syncing after CLEAN** (does not count toward the 3 review rounds — it adds main's code, not yours):
+- merged cleanly or only lockfile/migrations regenerated, CI green → label again, no new review
+- you resolved a conflict by hand → one *sync review*: `scripts/codex-review.sh T-NNNN sync` on the merge; `CLEAN` → label; anything else → stop and ask the human
 
 ## 5. Hand-off to the human
 
