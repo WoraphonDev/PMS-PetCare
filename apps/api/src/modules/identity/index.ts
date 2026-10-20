@@ -1,7 +1,36 @@
-// Public API of the identity module (ADR-0002): other modules import only from here.
+// Public API of identity (ADR-0002); request policy wiring lives here to keep common independent of identity internals.
+import type { Db } from "@app/db";
+import { Global, Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { PLATFORM_DB } from "../../common/db";
+import { PasswordChangeGuard, REQUEST_SESSION, sessionResolver } from "../../common/session";
+import { AUTH, type Auth, toHeaders } from "./auth";
+import { IdentityModule as IdentityCoreModule } from "./identity.module";
+import { findUserById } from "./identity.repository";
+
+@Global()
+@Module({
+  imports: [IdentityCoreModule],
+  providers: [
+    {
+      provide: REQUEST_SESSION,
+      inject: [AUTH, PLATFORM_DB],
+      useFactory: (auth: Auth, db: Db) =>
+        sessionResolver(async (headers) => {
+          const found = await auth.api.getSession({ headers: toHeaders(headers) });
+          if (!found) return null;
+          const user = await findUserById(db, found.user.id);
+          return user ? { user, sessionId: found.session.id } : null;
+        }),
+    },
+    { provide: APP_GUARD, useClass: PasswordChangeGuard },
+  ],
+  exports: [IdentityCoreModule, REQUEST_SESSION],
+})
+export class IdentityModule {}
+
 export { AUTH, type Auth, toHeaders } from "./auth";
 export { type AuthedRequest, AuthGuard } from "./auth.guard";
 export { BACKGROUND, BackgroundWork } from "./background";
-export { IdentityModule } from "./identity.module";
 export type { UserRow } from "./identity.repository";
 export { FailureLimiter } from "./rate-limit";
