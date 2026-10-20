@@ -4,6 +4,7 @@ import { AppError } from "../../../common/app-error";
 import type { Auth } from "../auth";
 import { findUserByIdentifier, isManagedAccountActive } from "../identity.repository";
 import type { FailureLimiter } from "../rate-limit";
+import { recordTwoFactorSession } from "../two-factor-session";
 
 export interface AuthLoginDeps {
   auth: Auth;
@@ -20,7 +21,7 @@ const invalid = () => new AppError("UNAUTHENTICATED", "Invalid credentials");
 
 // docs/spec/features/foundation.md#ep-auth.login · F09 · F11
 export async function authLogin(
-  ctx: { ip: string; headers: Headers },
+  ctx: { ip: string; headers: Headers; now: Date },
   input: AuthLoginRequest,
   deps: AuthLoginDeps,
 ): Promise<AuthLoginResult> {
@@ -52,8 +53,22 @@ export async function authLogin(
 
   if (!u) throw await fail(); // unreachable in practice: sign-in succeeded, so the user exists
   await deps.limiter.reset(identifier, ctx.ip);
+  const data = (await res.json()) as { twoFactorRedirect?: boolean; user?: { twoFactorEnabled?: boolean } };
+  if (data.user?.twoFactorEnabled && !data.twoFactorRedirect) {
+    const headers = new Headers(ctx.headers);
+    headers.set(
+      "cookie",
+      res.headers
+        .getSetCookie()
+        .map((c) => c.split(";")[0])
+        .join("; "),
+    );
+    const found = await deps.auth.api.getSession({ headers });
+    if (!found) throw invalid();
+    await recordTwoFactorSession(deps.platformDb, found.session, ctx.now);
+  }
   return {
-    body: { twoFactorRequired: false, mustChangePassword: u.mustChangePassword },
+    body: { twoFactorRequired: data.twoFactorRedirect === true, mustChangePassword: u.mustChangePassword },
     setCookies: res.headers.getSetCookie(),
   };
 }
