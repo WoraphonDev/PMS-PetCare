@@ -28,7 +28,7 @@ Decisions live in `docs/adr/` (read 0001–0006 once). Product behaviour lives i
 
 ## Workflow for every card
 
-1. Read the whole card `docs/tasks/T-nnnn.md`. Check every `depends_on` is merged (`git log --oneline | grep T-nnnn`). If not → stop.
+1. Branch from `origin/main`; run `scripts/sync-main.sh` again before each review round and before `agent-approved`. Read the whole card `docs/tasks/T-nnnn.md`. Check every `depends_on` is merged (`git log --oneline | grep T-nnnn`). If not → stop.
 2. Read only the spec sections listed in *Read first* (search the anchor, e.g. `grep -n 'id="ep-booking.create"' docs/spec/*.md`). Don't load whole spec files.
 3. Plan: files (must match `allowed_paths`), function signatures, tests. Size L → put the plan in the PR description first.
 4. Tests first. API services need integration tests on real Postgres (Testcontainers) covering: happy path, **every error code of the endpoint**, role denial, **other organization → NOT_FOUND**.

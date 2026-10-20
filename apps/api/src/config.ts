@@ -12,6 +12,9 @@ const Env = z.object({
   BUILD_SHA: z.string().min(1).default("dev"),
   /** Signs session cookies (Better Auth). ≥ 32 random characters. */
   BETTER_AUTH_SECRET: z.string().min(32),
+  /** Outgoing email (ADR-0005). Required except in tests (createEmailSender); local dev → Mailpit. */
+  SMTP_URL: z.url().optional(),
+  MAIL_FROM: z.string().min(3).optional(),
 });
 export type Config = z.infer<typeof Env>;
 
