@@ -75,7 +75,7 @@ spec เงียบ/ขัดกัน · ต้องแก้ไฟล์น�
 
 ### 5. ขนาดงาน
 
-PR เป้าหมาย < 400 บรรทัด **ไม่นับ test**, migration/snapshot ที่ generate และ lockfile (Q-0012) — ใหญ่กว่านั้นให้เสนอแยกการ์ด
+PR เป้าหมาย < 600 บรรทัด **ไม่นับ test**, migration/snapshot ที่ generate และ lockfile (Q-0012, Q-0017) — ใหญ่กว่านั้นให้เสนอแยกการ์ด
 
 ## Consequences
 
