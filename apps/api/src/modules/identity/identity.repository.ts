@@ -14,6 +14,11 @@ export async function findUserById(db: Db, id: string): Promise<UserRow | undefi
   return db.query.user.findFirst({ where: (u, { eq }) => eq(u.id, id) });
 }
 
+/** Our column, not Better Auth's — cleared once the user has set a password of their own (F09). */
+export async function clearMustChangePassword(platformDb: Db, userId: string): Promise<void> {
+  await platformDb.$client.query(`update "user" set must_change_password = false where id = $1`, [userId]);
+}
+
 /** F09: a managed account is usable only while its membership in the owning org is active. */
 export async function isManagedAccountActive(platformDb: Db, u: UserRow): Promise<boolean> {
   const orgId = u.managedByOrgId;

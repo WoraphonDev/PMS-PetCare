@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { organization, withTenant } from "@app/db";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { EMAIL_SENDER, FakeEmailSender } from "../../src/modules/notification/email";
 import { AUTH, type Auth } from "../../src/modules/identity";
+import { EMAIL_SENDER, FakeEmailSender } from "../../src/modules/notification/email";
 import { bootTestApp, testConfig } from "../support/app";
 import { createTestInfra, type TestInfra } from "../support/infra";
 
@@ -104,7 +104,8 @@ describe("auth.passwordForgot", () => {
     await signUp("limit@example.com");
     const addr = nextIp();
     const before = mail.sent.length;
-    for (let i = 0; i < 3; i++) expect((await post("/auth/password/forgot", { email: "limit@example.com" }, {}, addr)).statusCode).toBe(204);
+    for (let i = 0; i < 3; i++)
+      expect((await post("/auth/password/forgot", { email: "limit@example.com" }, {}, addr)).statusCode).toBe(204);
     expect(mail.sent.length).toBe(before + 3);
     expect((await post("/auth/password/forgot", { email: "LIMIT@example.com" }, {}, addr)).statusCode).toBe(204);
     expect(mail.sent.length).toBe(before + 3);

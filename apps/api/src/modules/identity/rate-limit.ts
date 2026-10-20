@@ -40,3 +40,7 @@ export class FailureLimiter {
 export const LOGIN_LIMITER = Symbol("LOGIN_LIMITER");
 /** F11: 5 failed logins / 15 minutes / (identifier + IP). */
 export const loginLimiter = (valkey: Valkey) => new FailureLimiter(valkey, "login-fail", 5, 15 * 60);
+
+export const FORGOT_LIMITER = Symbol("FORGOT_LIMITER");
+/** F11: 3 password-forgot requests / hour / (email + IP) — every request counts, not only failures. */
+export const forgotLimiter = (valkey: Valkey) => new FailureLimiter(valkey, "pw-forgot", 3, 60 * 60);
