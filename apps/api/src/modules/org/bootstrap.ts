@@ -1,11 +1,5 @@
-import { branch, branchHours, membership, organization, type TxContext } from "@app/db";
-
-// docs/spec/features/foundation.md#tbl-branch_hours — 7 rows per branch, ISO weekdays, default 09:00–18:00.
-const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
-const OPENS_AT = "09:00:00";
-const CLOSES_AT = "18:00:00";
-// F06: MVP branches are all Asia/Bangkok.
-const TIMEZONE = "Asia/Bangkok";
+import { branch, membership, organization, type TxContext } from "@app/db";
+import { BRANCH_TIMEZONE, insertDefaultHours } from "./org.repository";
 
 export interface BootstrapOrganizationInput {
   /** Already validated against the signup contract (foundation#rule-signup-input). */
@@ -40,13 +34,11 @@ export async function bootstrapOrganization(ctx: TxContext, input: BootstrapOrga
 
   const [firstBranch] = await tx
     .insert(branch)
-    .values({ orgId, name: input.branchName, timezone: TIMEZONE, isActive: true })
+    .values({ orgId, name: input.branchName, timezone: BRANCH_TIMEZONE, isActive: true })
     .returning({ id: branch.id });
   if (!firstBranch) throw new Error("bootstrapOrganization: the branch insert returned no row");
 
-  await tx
-    .insert(branchHours)
-    .values(WEEKDAYS.map((weekday) => ({ orgId, branchId: firstBranch.id, weekday, opensAt: OPENS_AT, closesAt: CLOSES_AT })));
+  await insertDefaultHours(tx, orgId, firstBranch.id);
 
   const [owner] = await tx
     .insert(membership)

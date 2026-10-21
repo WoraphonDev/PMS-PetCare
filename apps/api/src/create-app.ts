@@ -11,6 +11,7 @@ import { ErrorFilter, toErrorResponse } from "./common/error.filter";
 import { requestIdFrom } from "./common/request-id";
 import type { Config } from "./config";
 import { IdentityModule } from "./modules/identity";
+import { OrgModule } from "./modules/org/org.module";
 import { SystemModule } from "./modules/system/system.module";
 
 // Logged objects never carry credentials (AGENTS.md rule 9).
@@ -53,6 +54,7 @@ function rootModule(config: Config, infra: Infra, ownsInfra: boolean, extra: Arr
     // biome-ignore format: keep one entry per line
     imports: [
       IdentityModule,
+      OrgModule,
       SystemModule,
       ...extra,
     ],
