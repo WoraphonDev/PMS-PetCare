@@ -74,6 +74,7 @@ export async function createApp(
   opts: { extraModules?: Array<Type | DynamicModule>; logger?: boolean; logStream?: { write(line: string): void }; infra?: Infra } = {},
 ): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({
+    trustProxy: config.TRUSTED_PROXY_CIDRS ?? false,
     genReqId: (req: { headers: Record<string, string | string[] | undefined> }) => requestIdFrom(req.headers),
     logger:
       opts.logger === false

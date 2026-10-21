@@ -9,6 +9,12 @@ const Env = z.object({
   /** app_platform — BYPASSRLS, only for withPlatform() work. */
   DATABASE_PLATFORM_URL: z.url(),
   VALKEY_URL: z.url(),
+  /** Comma-separated proxy IPs/CIDRs from the deployment operator; absent means trust none. */
+  TRUSTED_PROXY_CIDRS: z
+    .string()
+    .transform((value) => value.split(",").map((part) => part.trim()))
+    .pipe(z.array(z.union([z.ipv4(), z.ipv6(), z.cidrv4(), z.cidrv6()])).min(1))
+    .optional(),
   BUILD_SHA: z.string().min(1).default("dev"),
   /** Signs session cookies (Better Auth). ≥ 32 random characters. */
   BETTER_AUTH_SECRET: z.string().min(32),

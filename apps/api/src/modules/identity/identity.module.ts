@@ -9,7 +9,16 @@ import { AUTH, createAuth } from "./auth";
 import { AuthGuard } from "./auth.guard";
 import { BACKGROUND, BackgroundWork } from "./background";
 import { IdentityController } from "./identity.controller";
-import { FORGOT_LIMITER, forgotLimiter, LOGIN_LIMITER, loginLimiter } from "./rate-limit";
+import {
+  FORGOT_LIMITER,
+  forgotLimiter,
+  LOGIN_LIMITER,
+  loginLimiter,
+  RESEND_LIMITER,
+  resendLimiter,
+  SIGNUP_LIMITER,
+  signupLimiter,
+} from "./rate-limit";
 
 @Module({
   imports: [EmailModule],
@@ -22,9 +31,11 @@ import { FORGOT_LIMITER, forgotLimiter, LOGIN_LIMITER, loginLimiter } from "./ra
     },
     { provide: LOGIN_LIMITER, inject: [VALKEY], useFactory: (valkey: Valkey) => loginLimiter(valkey) },
     { provide: FORGOT_LIMITER, inject: [VALKEY], useFactory: (valkey: Valkey) => forgotLimiter(valkey) },
+    { provide: SIGNUP_LIMITER, inject: [VALKEY], useFactory: signupLimiter },
+    { provide: RESEND_LIMITER, inject: [VALKEY], useFactory: resendLimiter },
     { provide: BACKGROUND, useValue: new BackgroundWork() },
     AuthGuard,
   ],
-  exports: [AUTH, AuthGuard],
+  exports: [AUTH, AuthGuard, SIGNUP_LIMITER, RESEND_LIMITER],
 })
 export class IdentityModule {}
