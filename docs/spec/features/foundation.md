@@ -83,6 +83,7 @@ Platform admin ไม่ใช่ role ใน org — เป็น flag `user.is
 | `timezone` | text | no | MVP = `Asia/Bangkok` เท่านั้น |
 | `promptpay_id` | text | yes | เบอร์มือถือ 10 หลัก หรือเลขผู้เสียภาษี 13 หลัก |
 | `is_active` | boolean | no | default true |
+| `version` | int | no | default 1, `>= 1` · aggregate version ของ outbox — ดู #rule-branch-version (T-0038) |
 
 <a id="tbl-branch_hours"></a>
 ### `branch_hours` (module `org`)
@@ -477,3 +478,57 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 - T-0011: prove Unicode counting ตรง PostgreSQL char_length; ทุกใบ size estimate เป็น budget ไม่ใช่ measured diff; เกิน 600 ต้องหยุดเสนอ split ให้มนุษย์อนุมัติ
 
 หลักฐานเดิมเป็น partial เท่านั้น: runtime-from-start spike 15 tests บน Postgres (ไม่รวม branch_hours/HTTP/races/approved no-session lifecycle); pinned 1.7.11 memory probe พบ JWT reusable/resend ไม่ revoke/duplicate synthetic success. ข้อความนี้ไม่ใช่ผลทดสอบ implementation หรือ full pnpm verify.
+
+## 11. Org / branch API contract amendment (T-0012)
+
+สถานะ: business decisions **อนุมัติโดย Zo ในแชท 2026-10-21** — T-0012-01 (A), T-0012-02 (A: พิกัดเป็น JSON number, `promptpayId` อยู่ใน read DTO), T-0012-03 (A), T-0012-04 (A), T-0012-05 (C: คอลัมน์ `branch.version` ผ่านการ์ด schema แยก ไม่ใช้ค่าคงที่ 1) บันทึกในไฟล์ `docs/questions/T-0012-0N.md` บน PR #35 (ยังไม่ merge). ข้อความนี้เป็น spec text ที่มนุษย์ต้อง merge ก่อนเริ่ม T-0038 / T-0012; ข้อใน #org-branch-technical-gates เป็น proposed technical defaults ให้มนุษย์ยืนยันตอน merge
+
+กติการ่วม: request body เป็น strict JSON object — key ที่ไม่อยู่ในรายการ → `VALIDATION_FAILED` + `details.fields.<key>`; string ถูก trim ก่อนตรวจ และนับความยาวแบบ PostgreSQL `char_length` (code point); field ที่ nullable ส่ง `null` เพื่อล้างค่า, string ว่างหลัง trim → `VALIDATION_FAILED`; PATCH ต้องมีอย่างน้อย 1 field; response ส่ง nullable column เป็น `null` (ไม่ละ key) และ instant เป็น ISO UTC
+
+<a id="contract-org"></a>
+### `Organization` DTO และ `org.update`
+
+- `Organization` = `{ id, slug, displayName, legalName, taxId, phone, logoFileId, receiptFooter, status, createdAt, updatedAt }` — `GET /org` และ `PATCH /org` ตอบ 200 ด้วย shape นี้
+- `PATCH /org` รับเฉพาะ `displayName` (1–100, ห้าม null) · `legalName` (1–100 หรือ null) · `taxId` (`^[0-9]{13}$` หรือ null, ไม่ตรวจ checksum) · `phone` (1–100 หรือ null, ไม่ตรวจรูปแบบ) · `receiptFooter` (1–500 หรือ null)
+- `slug`, `status`, `logoFileId` (read-only จนกว่า feature files กำหนด validation), `id`, `createdAt`, `updatedAt`, `orgId` → `VALIDATION_FAILED` โดยไม่เปลี่ยนข้อมูล
+- `updated_at` = `ctx.now`; audit `org.updated` (before/after เฉพาะฟิลด์ที่เปลี่ยน) ใน transaction เดียวกัน; ไม่มี outbox
+
+<a id="contract-branch"></a>
+### `Branch` DTO, `branch.create` และ `branch.update`
+
+- `Branch` = `{ id, name, address, phone, latitude, longitude, timezone, promptpayId, isActive, version, createdAt, updatedAt }` (ไม่มี `orgId`); `promptpayId` ส่งให้ทุก role ที่มี `org.settings.read`; `latitude`/`longitude` เป็น JSON number หรือ `null`
+- ฟิลด์: `name` 1–100 (ห้าม null; unique ต่อ org ตาม `branch_org_id_name_unique` แบบตรงตัวหลัง trim → ชนกัน `CONFLICT`, ชื่อเดียวกันข้าม org ได้) · `address` 1–500 หรือ null · `phone` 1–100 หรือ null · `latitude` −90…90 · `longitude` −180…180 — ทศนิยมเกิน 6 ตำแหน่ง → `VALIDATION_FAILED` (ไม่ปัด); request ต้องมีทั้งคู่หรือไม่มีทั้งคู่ และเป็น number ทั้งคู่หรือ null ทั้งคู่
+- `POST /branches` รับ `{ name, address?, phone?, latitude?, longitude? }` (ละ = null) → 201 `Branch`; server ตั้ง `timezone = 'Asia/Bangkok'`, `isActive = true`, `version = 1`, `promptpayId = null` และสร้าง `branch_hours` 7 แถว (ISO 1–7, 09:00–18:00) ใน transaction เดียว; F05 ตาม #rule-branch-capacity; audit + outbox `branch.created`
+- `PATCH /branches/{branchId}` รับ `name`, `address`, `phone`, `latitude`, `longitude`, `isActive` → 200 `Branch`; `promptpayId` (ใช้ #ep-branch.payment_settings.update), `timezone`, `version`, `id`, `orgId`, `createdAt`, `updatedAt` → `VALIDATION_FAILED`; `branchId` ไม่ใช่ UUID → `VALIDATION_FAILED`; ไม่พบหรือเป็นของ org อื่น → `NOT_FOUND` (F07); audit + outbox `branch.updated` ใน transaction เดียวกัน
+
+<a id="rule-branch-list"></a>
+### `branch.list`
+
+200 `{ items: Branch[] }` ไม่มี pagination เรียง `createdAt` asc แล้ว `id` asc; รวมสาขา `isActive = false`; owner/manager เห็นทุกสาขาของ org, role ระดับสาขาเห็นเฉพาะสาขาใน `membership_branch` ของตัวเอง (F02)
+
+<a id="rule-branch-capacity"></a>
+### F05 สำหรับ `branch.create`
+
+- นับ **ทุกแถว** `branch` ของ org (รวม `is_active = false` — ปิดสาขาไม่คืนโควตา); `max_branches` null = ไม่จำกัด; count ≥ `max_branches` → `PLAN_LIMIT_REACHED` (402) ไม่มี branch/hours/audit/outbox
+- อ่านผ่าน public service ของ module `subscription` บน tenant transaction เดียวกัน: `SELECT … FOR UPDATE` แถว `subscription` ของ org **ก่อน** นับและก่อน insert branch — concurrent create และการเปลี่ยนแพ็กเกจในอนาคต (`platform.org.setPlan` ต้อง lock แถวเดียวกัน) จึง serialize กัน
+- ไม่มีแถว subscription → `INTERNAL` (fail closed; signup สร้างเสมอ); plan `is_active = false` หรือ `current_period_end` ผ่านไปแล้ว → ยังบังคับ `max_branches` ของ plan นั้น (MVP ไม่มี lifecycle); ไม่เพิ่ม error code
+
+<a id="rule-branch-version"></a>
+### `branch.version` — per-aggregate version
+
+- `version int not null default 1 check (version >= 1)`; แถวเดิมทั้งหมดได้ค่า 1 ตอน migrate (T-0038)
+- ทุก `UPDATE` แถว branch เพิ่ม `version = version + 1` **ใน statement เดียวกัน** และอ่านค่าใหม่จาก `RETURNING` — row lock ของ UPDATE ทำให้ concurrent update ได้ค่าเรียงกันไม่ซ้ำ; ผู้เขียนแถว branch มีเฉพาะ module `org` (repository) จึงเป็นเจ้าของการ increment รวมถึง `branch.paymentSettings.update`
+- `version` เพิ่มขึ้นแบบ strictly monotonic ต่อ branch แต่ **ไม่รับประกันต่อเนื่อง** ใน outbox (update ที่ไม่มี event เช่น PromptPay ทำให้เลขข้าม) — consumer ใช้เพื่อเรียงลำดับ/ทิ้ง event เก่า ไม่ใช่ตรวจว่าครบ
+
+<a id="rule-branch-outbox"></a>
+### Outbox `branch.created` / `branch.updated`
+
+`org_id` = org, `branch_id` = `aggregate_id` = branch.id, `aggregate_type = 'branch'`, `aggregate_version` = `branch.version` หลังการเปลี่ยน (create = 1), `occurred_at = ctx.now`; `payload` = `Branch` DTO หลังการเปลี่ยน **ไม่รวม** `promptpayId`; `branch.updated` เพิ่ม `changedFields: string[]` (ชื่อ camelCase ของฟิลด์ที่ค่าเปลี่ยนจริง เรียงตามตัวอักษร); เขียนใน transaction เดียวกับการเปลี่ยนข้อมูลและ audit; request ที่ถูกปฏิเสธไม่มี event/audit
+
+<a id="org-branch-technical-gates"></a>
+### Proposed technical defaults (มนุษย์ยืนยันตอน merge — ไม่ใช่ business decision ใหม่)
+
+1. PATCH ที่ทุกค่าเท่าเดิม (no-op): ตอบ 200 DTO ปัจจุบัน ไม่ UPDATE แถว ไม่เพิ่ม `version` ไม่มี audit/outbox
+2. พิกัดใน PATCH ใช้กติกา "ทั้งคู่หรือไม่มีทั้งคู่" ระดับ request (ไม่ผสมกับค่าที่บันทึกอยู่)
+3. `version` อยู่ใน `Branch` DTO ตามกติกา DTO = คอลัมน์ camelCase
+4. increment เป็น application-owned (ไม่มี DB trigger); T-0014 ต้อง increment ด้วย statement เดียวกัน — ถ้าต้องการให้ DB บังคับทุก writer ให้เปลี่ยนเป็น `BEFORE UPDATE` trigger ใน T-0038 แทน
