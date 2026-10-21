@@ -298,8 +298,10 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 | key | method · path | สิทธิ์ | หมายเหตุ |
 |---|---|---|---|
 | <a id="ep-system.health"></a>`system.health` | `GET /health` | public | `{ status: "ok", version }` (version = git sha ของ build) · ไม่แตะ DB — ใช้เป็น liveness probe |
-| <a id="ep-auth.signup"></a>`auth.signup` | `POST /auth/signup` | public | `{ email, password, displayName, orgName, orgSlug, branchName }` → สร้าง user + org + branch + hours + membership owner + subscription `mvp_free` ใน transaction เดียว; ส่งอีเมลยืนยัน · errors: `VALIDATION_FAILED`, `CONFLICT` (email/slug), `RATE_LIMITED` |
-| <a id="ep-auth.login"></a>`auth.login` | `POST /auth/login` | public | `{ identifier, password }` (identifier = email หรือ username) · rate limit 5 ครั้ง/15 นาที/identifier+IP · ตอบ `{ twoFactorRequired, mustChangePassword }` · errors: `UNAUTHENTICATED`, `RATE_LIMITED` |
+| <a id="ep-auth.signup"></a>`auth.signup` | `POST /auth/signup` | public | `{ email, password, displayName, orgName, orgSlug, branchName }` → สร้าง user + org + branch + hours + membership owner + subscription `mvp_free` ใน transaction เดียว; verification state + ส่งอีเมลหลัง commit; 201 `{ verificationRequired: true }` ไม่มี session · ดู #rule-signup-input, #rule-email-verification-http · errors: `VALIDATION_FAILED`, `CONFLICT` (email/slug), `RATE_LIMITED`, `INTERNAL` |
+| <a id="ep-auth.login"></a>`auth.login` | `POST /auth/login` | public | `{ identifier, password }` (identifier = email หรือ username) · rate limit 5 ครั้ง/15 นาที/identifier+IP · ตอบ `{ twoFactorRequired, mustChangePassword }` · real-email ต้อง verified, managed ยกเว้นเฉพาะ verification ตาม #rule-email-login-policy · errors: `UNAUTHENTICATED`, `RATE_LIMITED` |
+| <a id="ep-auth.email.verify"></a>`auth.email.verify` | `POST /auth/email/verify` | public | `{ token }` → 204 ไม่มี body/session/cookie; errors: `VALIDATION_FAILED` + `details.fields.token` (invalid/expired/reused/replaced/wrong-purpose), `INTERNAL` · #rule-email-verification-http |
+| <a id="ep-auth.email.verification.resend"></a>`auth.email.verification.resend` | `POST /auth/email/verification/resend` | public | `{ email }` → uniform 204 ตาม #rule-email-verification-http / #rule-signup-abuse; errors: `VALIDATION_FAILED` (schema), `INTERNAL` (non-suppressed infrastructure) |
 | <a id="ep-auth.two_factor.verify"></a>`auth.twoFactor.verify` | `POST /auth/2fa/verify` | session รอ 2FA | `{ code, trustDevice? }` (TOTP หรือ backup code) · F10 |
 | <a id="ep-auth.two_factor.enable"></a>`auth.twoFactor.enable` | `POST /auth/2fa/enable` | user | `{ password }` → `{ totpUri, backupCodes }`; มีผลหลัง verify ครั้งแรก · audit |
 | <a id="ep-auth.two_factor.disable"></a>`auth.twoFactor.disable` | `POST /auth/2fa/disable` | user | `{ password, code }` · platform admin ปิดไม่ได้ (`FORBIDDEN`) · audit |
@@ -344,6 +346,7 @@ Response DTO ใช้ชื่อ camelCase ของคอลัมน์ใ�
 |---|---|---|---|
 | <a id="scr-auth-signup"></a>`scr-auth-signup` | `/signup` | public | ฟอร์ม US-F01: ชื่อ, email, รหัสผ่าน, ชื่อร้าน, slug (สร้างอัตโนมัติจากชื่อ แก้ได้), ชื่อสาขาแรก |
 | <a id="scr-auth-login"></a>`scr-auth-login` | `/login` | public | "email หรือชื่อผู้ใช้", รหัสผ่าน, ลิงก์ลืมรหัสผ่าน (สำหรับบัญชี email) |
+| <a id="scr-auth-verify-email"></a>`scr-auth-verify-email` | `/verify-email` | public | fragment token → clear history ก่อน analytics → POST JSON; pending/success/invalid/expired/reused/replaced/network failure states; success ให้ไป login ไม่ auto-login; email input + resend/recovery สำหรับลิงก์เสีย/ไม่มีลิงก์และ legacy real-email จาก login; uniform acknowledgement ไม่ยืนยันว่ามีบัญชีหรือส่งสำเร็จ; รายละเอียดข้อความไทย/i18n ต้องกำหนดในการ์ด T-0023 ที่มนุษย์อนุมัติก่อน implementation |
 | <a id="scr-auth-2fa"></a>`scr-auth-2fa` | `/login/2fa` | session รอ 2FA | รหัส 6 หลัก หรือ backup code, ☐ จำอุปกรณ์นี้ 30 วัน |
 | <a id="scr-auth-change-password"></a>`scr-auth-change-password` | `/change-password` | user | บังคับเมื่อ `mustChangePassword` |
 | <a id="scr-account-security"></a>`scr-account-security` | `/account/security` | user | เปลี่ยนรหัสผ่าน, เปิด/ปิด 2FA (QR + backup codes) |
@@ -381,3 +384,96 @@ Response DTO ใช้ชื่อ camelCase ของคอลัมน์ใ�
 - Q-0005 → `mvp_free` = 1 สาขา / 5 พนักงาน
 - Q-0006 → บัญชี managed (username + รหัสผ่านที่ owner/manager ตั้ง) — F09; LINE Login สำหรับพนักงานเป็นเฟสถัดไป
 - Q-0007 → 2FA บังคับ platform admin, role อื่นเปิดเอง — F10
+
+
+## 10. Signup / verification handoff amendment
+
+สถานะ: business decisions ด้านล่าง **ได้รับอนุมัติแล้ว**; รายละเอียด storage/API ภายในเป็น proposed technical design สำหรับ human-reviewed spec PR ก่อนเริ่ม implementation ไม่ใช่ข้ออ้างว่า Better Auth ทำได้เอง ไม่เพิ่ม error code, schema, grant, dependency, audit action หรือ outbox event โดยปริยาย
+
+<a id="rule-signup-input"></a>
+### Signup input และ response
+
+`POST /api/v1/auth/signup` public รับ `{ email, password, displayName, orgName, orgSlug, branchName }` เท่านั้นตาม contract ของระบบ
+- password 10–128 ไม่ trim; displayName/orgName/branchName trim ก่อนตรวจ 1–100 ตัวอักษร; orgSlug ตรง `^[a-z0-9-]{3,40}$` ไม่แก้ค่าหรือ lowercase ให้เอง
+- email ใช้ canonical lowercase ให้ตรง login ปัจจุบัน; ต้องตรวจ pinned Better Auth normalization และข้อมูลเก่าก่อนประกาศว่ารองรับ uniqueness แบบ case-insensitive ทั้งระบบ ตารางปัจจุบัน `user.email` เป็น text unique ไม่ใช่ citext จึงห้ามอ้างว่า DB บังคับ case-insensitive แล้ว; หากต้องเปลี่ยน schema/data ต้องเปิด pending decision แยกก่อน
+- สำเร็จ `201 { verificationRequired: true }`; ไม่ส่ง identity, token, session หรือ Set-Cookie
+- duplicate email หรือ orgSlug → `CONFLICT`; schema ผิด → `VALIDATION_FAILED`; เกิน signup quota → `RATE_LIMITED`; infra/DB/Valkey ล้มเหลวก่อน commit → `INTERNAL` ที่ sanitize แล้ว
+- การตั้งชื่อข้างต้นเข้ากับ text columns ปัจจุบัน และ orgName 1–100 เข้ากับ organization_display_name_length; ต้องทดสอบ Unicode length ให้ตรง PostgreSQL char_length (ไม่ใช้ UTF-16 .length เป็นหลักฐานว่าตรงแล้ว)
+
+<a id="rule-signup-atomic"></a>
+### Atomic bootstrap และ synthetic-success guard
+
+เริ่ม outer transaction บน `app_runtime` ตั้งแต่แรก ตรวจว่า current/session user เป็น runtime non-superuser/non-owner/NOBYPASSRLS; ไม่ใช้ platform start → runtime switch (grants ปัจจุบันปฏิเสธ 42501) และไม่เพิ่ม grants
+ใช้ `createAuth(config, tx, ...)` ต่อ operation บน tx เดียว; ห้ามใช้ singleton auth ที่ผูก platformDb หรือเปิด withTenant อีก transaction หนึ่ง
+preallocate org UUID, ตั้ง `app.org_id` แบบ transaction-local บน tx เดิมผ่าน reviewed tenant helper แล้วเรียก org/subscription เฉพาะ public `index.ts` services ที่รับ tx/context ไม่ cross-module insert
+สร้าง user + credential account + current verification state + organization active + branch active Asia/Bangkok + branch_hours 7 แถว ISO 1–7, 09:00–18:00 + active owner membership + mvp_free subscription (current_period_end null) ทั้งหมดใน commit เดียว ไม่มี signup session และไม่สร้าง membership_branch สำหรับ owner โดยไม่มี requirement
+
+Better Auth เมื่อปิด auto-login/บังคับ verify อาจคืน synthetic success สำหรับ email ซ้ำ: ห้ามเชื่อ returned id หรือ success status แล้วสร้าง tenant
+ก่อน signup serialize ด้วย transaction-scoped DB lock ของ canonical email (รวม absent-user race); ตรวจ persisted existing identity หลังได้ lock → CONFLICT จากนั้นเรียก auth และตรวจ returned UUID มี persisted user + credential account ของ email เดียวกันใน tx นี้จริง และไม่มี identity อยู่ก่อน operation จึงอนุญาต bootstrap; synthetic id ที่ไม่มี row ต้อง fail/rollback ไม่สร้าง org
+DB unique violations ที่เป็น email/slug collision ต้อง map CONFLICT; infra/unknown constraint ต้องไม่กลบเป็น CONFLICT ทดสอบ simultaneous same-email/different-slug และ same-slug/different-email มีผู้ชนะหนึ่งราย ไม่มี orphan/extra tenant
+email lock protocol ต้องใช้กับ signup writer ทุกตัวใน scope; ไม่อ้างว่าป้องกัน writer อื่นที่ไม่ร่วม protocol ด้วยตัวเอง DB uniqueness ยังคงเป็น backstop ตามชนิด column ปัจจุบัน
+COMMIT สำเร็จก่อนปล่อย response/email; SQL error/application throw/commit failure ต้องไม่ปล่อย message collector ไม่เพิ่ม idempotency/retry หรือรับประกันผลเมื่อ connection ขาดระหว่าง commit โดยไม่มี decision
+
+<a id="rule-email-verification-state"></a>
+### Proposed identity-owned persistent verification state (ไม่เปลี่ยน schema)
+
+ใช้ existing `verification(id, identifier, value, expires_at, created_at, updated_at)` เท่านั้น; namespace นี้แยกจาก reset-password, two-factor และ native Better Auth identifiers:
+- identifier = `pms:email-verify:v1:<user UUID>` (purpose signup/real-email verification เท่านั้น)
+- value = JSON text `{ "purpose": "email-verify", "version": 1, "digest": "<lowercase SHA-256 hex of complete signed token>" }`; ไม่มี raw token/email/link ใน row หรือ identifier; expires_at = issuance + 24h โดยไม่ยืดอายุเพราะ consume
+- created_at/updated_at และ application expiry ใช้ injected CLOCK; signed token exp 86400 วินาทีตาม pinned Better Auth ภายใต้ narrow internal-clock exception เท่านั้น ตรวจทั้ง signed exp และ persisted expires_at; now >= expiry ถือว่าหมดอายุ
+- ทุก issue/rotate/consume ต้อง `SELECT user ... FOR UPDATE` ก่อนอ่าน/แก้ namespace rows บน tx เดียวกัน ไม่อาศัย SELECT verification FOR UPDATE อย่างเดียวเพราะ absent-row race; signup lock newly inserted user ได้และ invisible จน commit
+- rotation ภายใต้ lock: delete namespace rows เก่าทั้งหมดแล้ว insert current row หนึ่งแถว; ไม่ใช้ ON CONFLICT(identifier) เพราะ existing index ไม่ unique; verify ต้องพบ current state หนึ่งแถวพอดี ถ้ามีหลายแถวผิด invariant ให้ fail closed เป็น INTERNAL และ sanitized diagnostic ไม่เลือกรายการสุ่ม
+- consume: validate signed payload/purpose + identify persisted user, lock user, recheck email binding/current eligibility/current digest/expiry แล้ว conditional delete current row และ update user.emailVerified=true ใน transaction เดียว; error rollback ทั้งสอง ไม่มี separate native verify transaction; consumed state แทนด้วย absence ของ current row ไม่ต้องเพิ่ม consumed_at/version column
+- JWT ต้องเป็น verification-only: reject updateTo/change-email/requestType branches ที่ไม่ใช่ approved purpose ห้ามให้ token จาก password reset/2FA ใช้แทน; namespace/digest binding เป็น additional purpose guard ไม่เชื่อ decoded unsigned email
+- ต้องมี unpredictable per-issuance nonce ใน authenticated signed payload โดยใช้ pinned signing path ที่พิสูจน์ก่อน (ถ้าทำไม่ได้ให้หยุดถาม ไม่ออก bespoke signing protocol เงียบ ๆ) เพื่อให้ same-second resend ได้ token ใหม่จริง ไม่ persist nonce/raw token แยก; native payload ปัจจุบันอาจออก JWT เหมือนเดิมในวินาทีเดียว
+- lock order เป็น user ก่อน verification เสมอ; concurrent verify token เดียวสำเร็จ 204 หนึ่งครั้ง ที่เหลือ VALIDATION_FAILED; resend ได้ lock ก่อน → old verify fail, verify ได้ lock ก่อน → verified แล้ว resend ไม่ rotate/send; concurrent allowed resends → state ของ rotation สุดท้ายเท่านั้นใช้ได้ ลำดับส่ง email อาจต่างจากลำดับ lock ไม่รับประกัน delivered-latest
+- namespace cleanup: rotate/consume ลบของ user นี้เท่านั้น; expired current row อยู่ได้จน rotate/consume/การล้างที่ได้รับอนุมัติ ไม่เพิ่ม retention SLA หรือ worker; ต้องพิสูจน์ Better Auth cleanup/password-reset ไม่ลบ unexpired app namespace โดยไม่ตั้งใจ
+- SQL/row lock/crypto helper อยู่ identity repository หรือ public shared DB primitive ที่ระบุในการ์ดเท่านั้น; ไม่เพิ่ม drizzle-orm dependency ใน api โดยปริยาย
+
+<a id="rule-email-verification-http"></a>
+### Verification / resend / delivery
+
+`POST /api/v1/auth/email/verify` public JSON `{ token }` → 204 ไม่มี session/cookie/body; invalid/malformed/expired/reused/replaced/wrong-purpose → VALIDATION_FAILED + details.fields.token; infra failure → INTERNAL ไม่ปลอมเป็น invalid token
+`POST /api/v1/auth/email/verification/resend` public JSON `{ email }` → 204 เหมือนกันสำหรับ schema-valid request ทั้ง known-unverified, unknown, verified, managed, throttled, Valkey outage และ provider failure; malformed schema → VALIDATION_FAILED; ไม่รับประกัน 204 เมื่อ DB/infra ที่ไม่ใช่ approved suppression ล้มเหลว ให้ INTERNAL แบบไม่ขึ้นกับการเปิดเผย recipient
+
+capture verification message ใน request-local collector ระหว่าง transaction ห้ามส่งจริงจาก Better Auth callback; หลัง outer commit เท่านั้นจึงส่งผ่าน existing notification/email public EmailSender; rollback discard ทั้ง collector
+send ล้มเหลวหลัง commit ยังตอบ signup 201 / resend 204, ไม่ refund quota, ไม่ย้อน verification rotation; เก็บ sanitized error category เท่านั้น ไม่ token/email/link/provider exception; ไม่มี durable queue/outbox/new worker หรือ confirmed-delivery guarantee ใน scope
+ปิด autoSignIn, autoSignInAfterVerification, sendOnSignIn และ default sender ที่ bypass collector/state; Better Auth HTTP handler ต้อง unmounted ต่อไป ไม่ forward callbackURL/cookie/query token
+web link `/verify-email#token=<encoded>`; web อ่าน fragment แล้ว clear history ก่อน analytics/POST JSON; ไม่ส่ง token ผ่าน URL query/referrer/log/audit/analytics ใช้ contracts/api-client เมื่อ web พร้อม
+
+<a id="rule-signup-abuse"></a>
+### Atomic abuse limits (business policy approved)
+
+signup: 5 schema-valid attempts / 3600s / trusted IP, prefix แยก login/forgot/resend; ครั้งที่ 1–5 ผ่าน quota, ครั้งที่ 6 เป็นต้นไป RATE_LIMITED; conflicts นับด้วย; malformed schema ไม่นับ; Valkey outage fail closed INTERNAL ก่อน DB write
+resend: 3 schema-valid attempts / 3600s / normalized email **และ** 10 / 3600s / trusted IP; ทุก valid request นับทั้งสอง counter แม้ unknown/verified/managed หรืออีก counter เกินแล้ว; atomic increment/check ทั้งคู่ใน operation เดียวและ expire ตั้งเฉพาะ first attempt ไม่ sliding TTL; over-limit หรือ Valkey outage ไม่ rotate/send และยัง 204; send failure ไม่คืน quota
+ห้าม reuse separate check-then-increment; concurrent calls ต้องไม่เกิน quota ใช้ atomic Valkey script/transaction ที่ตรวจ command errors จริง ห้าม fail-open จาก null/error replies; trusted proxy/IP configuration ต้อง explicit ไม่เชื่อ raw X-Forwarded-For; ห้ามเปลี่ยน login/forgot quotas ไปด้วย
+
+<a id="rule-email-login-policy"></a>
+### Managed / legacy login และ clock exception
+
+บัญชี real-email ที่ emailVerified=false (รวมข้อมูลเก่า) login ทั้ง email และ username → UNAUTHENTICATED ตาม failure counter เดิม ไม่มี session/cookie; ขอ resend เพื่อ verify ได้ ไม่มี mass auto-verification
+บัญชี isManaged=true ยกเว้น real-email verification เท่านั้น ยังคง F09 active owning membership, must-change-password และ F10 2FA; ห้ามส่ง email ไป managed.invalid ทุกกรณี ไม่ใช้ suffix เพียงอย่างเดียวเป็นหลักฐานให้ bypass
+ห้ามเปิด global requireEmailVerification โดยไม่ implement managed exception หรือ set managed.emailVerified=true เพื่อหลอกว่า verify จริง; app-level guard ต้องไม่ส่ง session ก่อนตรวจ policy และทดสอบทั้ง identifier modes
+CLOCK ใช้กับ application timestamps/limiter-facing time; อนุญาตเฉพาะ pinned Better Auth internal signup/verification Date ที่ไม่มี injection API; production ห้าม override global Date, isolated tests restore Date/fake timers เสมอ
+
+<a id="accept-signup-verification"></a>
+### Additional acceptance / release gate
+
+ต้องผ่าน tests ตาม T-0033–T-0037 และ T-0011: real Postgres rollback ทุกขั้นรวม branch_hours, persisted current-token atomicity/races; real Valkey parallel quotas/TTL/outage; HTTP envelopes/no session/no cookie; failed send/rollback never-send; managed/legacy/login+reset+2FA regression; token/PII redaction; clock expiry exact boundary; synthetic-success guard; pooled same-PID context cleanup และ wrong-role denial
+public auth endpoints ไม่มี org-id resource/role permission จึงไม่ประดิษฐ์ FORBIDDEN/NOT_FOUND endpoint cases; tenant helper/service tests ต้องพิสูจน์ wrong-org isolation และ no-context RLS denial แทน
+T-0023 ต้องมี verification fragment landing/resend/recovery/error state และ signup 201 ไม่อ้างว่าส่งสำเร็จแล้ว; ห้ามเปิด signup ให้ผู้ใช้พร้อมใช้งานก่อน web verification พร้อม T-0029 เพิ่ม signup → verify → login → invite flow
+การ activate legacy real-email login gate ต้องพร้อม working resend/verification recovery ด้วย ไม่ใช่ deploy T-0036 แล้วตัดทางเข้าบัญชีเก่าโดยยังไม่มี recovery UI; เป็น coordinated release gate ไม่เพิ่ม dependency กลับไป T-0023 จนเกิด cycle และไม่อนุญาต bypass verification
+
+<a id="signup-technical-gates"></a>
+### Pending technical gates (ไม่ใช่ business decisions ที่รออนุมัติซ้ำ)
+
+- T-0033: prove pinned public signing/verification extension รองรับ authenticated random nonce และ transaction-bound callbacks บน actual Postgres; public API ไม่พอ → question ก่อนเปลี่ยน token format/library/dependency
+- T-0011: prove canonical-email normalization ทุก writer และตรวจ disposable historical mixed-case collision fixture; text unique ไม่พิสูจน์ historical case-insensitive uniqueness. ถ้าจำเป็นต้อง citext/unique lower(email)/แก้ข้อมูลเก่า ต้อง explicit schema/data decision + collision resolution/rollout/migration card แยก ห้ามตรวจหรือแก้ production เอง
+- T-0033: prove user-lock rotate/consume protocol ร่วมกับทุก namespace writer/cleanup บน real DB; ถ้าพิสูจน์ไม่ได้หยุดถามก่อน unique identifier/consumed_at/purpose schema change
+- T-0034: prove public TxContext ป้องกัน wrong connection; test-harness grants ไม่ใช่ production grants verification; ห้าม platform-start fallback หรือเพิ่ม grants
+- T-0037: prove deployed Valkey topology รองรับ atomic dual-key operation; cluster ต้อง resolve key-slot/topology ก่อน ไม่มี permission เปลี่ยน quota; trusted proxy allowlist ต้องอิง deployment ไม่เดา hops
+- T-0035/T-0011: delivery ordering/durability/retry และ commit-disconnect ambiguity ยังไม่รับประกัน; latest-token-only ไม่ใช่ delivered-latest guarantee
+- T-0035/T-0011: ADR-0005 email usage-cost attribution ยังไม่มี approved event/usage attribution สำหรับ signup/resend; ถ้าจำเป็นต้องเพิ่มให้ question ก่อน ไม่ invent usage_event/outbox action หรืออ้าง cost accounting ครบ
+- T-0011: prove Unicode counting ตรง PostgreSQL char_length; ทุกใบ size estimate เป็น budget ไม่ใช่ measured diff; เกิน 600 ต้องหยุดเสนอ split ให้มนุษย์อนุมัติ
+
+หลักฐานเดิมเป็น partial เท่านั้น: runtime-from-start spike 15 tests บน Postgres (ไม่รวม branch_hours/HTTP/races/approved no-session lifecycle); pinned 1.7.11 memory probe พบ JWT reusable/resend ไม่ revoke/duplicate synthetic success. ข้อความนี้ไม่ใช่ผลทดสอบ implementation หรือ full pnpm verify.
