@@ -1,4 +1,6 @@
 import {
+  AuthEmailVerificationResendRequest,
+  AuthEmailVerifyRequest,
   AuthLoginRequest,
   type AuthLoginResponse,
   AuthPasswordChangeRequest,
@@ -12,14 +14,16 @@ import {
 import type { Db } from "@app/db";
 import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { CLOCK, type Clock, CONFIG } from "../../common/context";
-import { PLATFORM_DB } from "../../common/db";
+import { PLATFORM_DB, RUNTIME_DB } from "../../common/db";
 import { ZodBody } from "../../common/zod.pipe";
 import type { Config } from "../../config";
 import { EMAIL_SENDER, type EmailSender } from "../notification/email";
 import { AUTH, type Auth, toHeaders } from "./auth";
 import { type AuthedRequest, AuthGuard } from "./auth.guard";
 import { BACKGROUND, type BackgroundWork } from "./background";
-import { type FailureLimiter, FORGOT_LIMITER, LOGIN_LIMITER } from "./rate-limit";
+import { type FailureLimiter, FORGOT_LIMITER, LOGIN_LIMITER, RESEND_LIMITER, type ResendLimiter } from "./rate-limit";
+import { authEmailVerificationResend } from "./use-cases/auth.email.verification.resend";
+import { authEmailVerify } from "./use-cases/auth.email.verify";
 import { authLogin } from "./use-cases/auth.login";
 import { authLogout } from "./use-cases/auth.logout";
 import { authPasswordChange } from "./use-cases/auth.password_change";
@@ -38,12 +42,34 @@ export class IdentityController {
     @Inject(CONFIG) private readonly config: Config,
     @Inject(EMAIL_SENDER) private readonly email: EmailSender,
     @Inject(AUTH) private readonly auth: Auth,
+    @Inject(RUNTIME_DB) private readonly runtimeDb: Db,
+    @Inject(RESEND_LIMITER) private readonly resendLimiter: ResendLimiter,
     @Inject(PLATFORM_DB) private readonly platformDb: Db,
     @Inject(LOGIN_LIMITER) private readonly limiter: FailureLimiter,
     @Inject(FORGOT_LIMITER) private readonly forgotLimiter: FailureLimiter,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(BACKGROUND) private readonly background: BackgroundWork,
   ) {}
+
+  @Post("auth/email/verify")
+  @HttpCode(204)
+  async emailVerify(@Body(new ZodBody(AuthEmailVerifyRequest)) body: AuthEmailVerifyRequest): Promise<void> {
+    await authEmailVerify({ now: this.clock.now() }, body, { db: this.runtimeDb, secret: this.config.BETTER_AUTH_SECRET });
+  }
+
+  @Post("auth/email/verification/resend")
+  @HttpCode(204)
+  async emailVerificationResend(
+    @Body(new ZodBody(AuthEmailVerificationResendRequest)) body: AuthEmailVerificationResendRequest,
+    @Req() req: { ip: string },
+  ): Promise<void> {
+    await authEmailVerificationResend({ now: this.clock.now(), ip: req.ip }, body, {
+      db: this.runtimeDb,
+      config: this.config,
+      email: this.email,
+      limiter: this.resendLimiter,
+    });
+  }
 
   @Post("auth/login")
   @HttpCode(200)
