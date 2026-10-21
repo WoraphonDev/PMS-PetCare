@@ -330,7 +330,8 @@ it("transaction-bound Better Auth signup callback captures approved state with a
   expect(sender.sent).toEqual([]);
   await ready.dispatch();
   expect(sender.sent.map((m) => m.to)).toEqual([email]);
-  for (const path of ["/api/auth/verify-email", "/api/v1/auth/verify-email", "/api/v1/auth/signup"]) {
+  // Native Better Auth routes stay unmounted; /api/v1/auth/signup is the T-0011 contract route (signup.test.ts).
+  for (const path of ["/api/auth/verify-email", "/api/v1/auth/verify-email", "/api/auth/sign-up/email"]) {
     expect((await app.inject({ method: "POST", url: path, payload: {} })).statusCode).toBe(404);
   }
 });
