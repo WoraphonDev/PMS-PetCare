@@ -318,7 +318,9 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 | <a id="ep-branch.update"></a>`branch.update` | `PATCH /branches/{branchId}` | `branch.update` | ไม่รวม `promptpay_id` · outbox `branch.updated` |
 | <a id="ep-branch.payment_settings.update"></a>`branch.paymentSettings.update` | `PUT /branches/{branchId}/payment-settings` | `branch.payment_settings.update` | `{ promptpayId }` · F08 · audit `branch.payment_settings_updated` · **human_review** |
 | <a id="ep-branch.hours.put"></a>`branch.hours.put` | `PUT /branches/{branchId}/hours` | `branch.update` | ครบ 7 วัน · outbox `branch.hours_changed` |
-| <a id="ep-branch.closures"></a>`branch.closure.create` / `.delete` / `.list` | `POST·DELETE·GET /branches/{branchId}/closures` | `branch.update` (list: `org.settings.read`) | outbox `branch.hours_changed` |
+| <a id="ep-branch.closures"></a><a id="ep-branch.closure.create"></a>`branch.closure.create` | `POST /branches/{branchId}/closures` | `branch.update` | 201 Closure · outbox `branch.hours_changed` · #contract-branch-closures |
+| <a id="ep-branch.closure.delete"></a>`branch.closure.delete` | `DELETE /branches/{branchId}/closures/{closureId}` | `branch.update` | 204 ไม่มี body · outbox `branch.hours_changed` |
+| <a id="ep-branch.closure.list"></a>`branch.closure.list` | `GET /branches/{branchId}/closures` | `org.settings.read` | 200 `{ items: Closure[] }` · ไม่มี event |
 | <a id="ep-staff.list"></a>`staff.list` | `GET /staff` | `staff.read` | membership + คำเชิญที่ค้าง |
 | <a id="ep-staff.invite"></a>`staff.invite` | `POST /staff/invitations` | `staff.invite` | `{ email, role, branchIds }` · F02, F03, F05 · ส่งอีเมล · audit `staff.invited` |
 | <a id="ep-staff.invitation.revoke"></a>`staff.invitation.revoke` | `DELETE /staff/invitations/{invitationId}` | `staff.invite` | |
@@ -334,7 +336,7 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 | <a id="ep-platform.org.set_status"></a>`platform.org.setStatus` | `PUT /platform/orgs/{orgId}/status` | platform admin | `{ status, reason }` · audit `platform.org_status_changed` |
 | <a id="ep-platform.org.set_plan"></a>`platform.org.setPlan` | `PUT /platform/orgs/{orgId}/subscription` | platform admin | `{ planCode, currentPeriodEnd?, note? }` · audit `platform.plan_changed` · **human_review** |
 
-Response DTO ใช้ชื่อ camelCase ของคอลัมน์ใน §3 (ไม่ส่ง `token_hash`, `org_id` ภายใน)
+Response DTO ใช้ชื่อ camelCase ของคอลัมน์ใน §3 (ไม่ส่ง `token_hash`, `org_id` ภายใน); hours response เป็น projection ที่กำหนดเฉพาะใน #contract-branch-hours ไม่ใช่ row DTO
 
 ## 6. Audit actions
 
@@ -532,3 +534,56 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 2. พิกัดใน PATCH ใช้กติกา "ทั้งคู่หรือไม่มีทั้งคู่" ระดับ request (ไม่ผสมกับค่าที่บันทึกอยู่)
 3. `version` อยู่ใน `Branch` DTO ตามกติกา DTO = คอลัมน์ camelCase
 4. increment เป็น application-owned (ไม่มี DB trigger); T-0014 ต้อง increment ด้วย statement เดียวกัน — ถ้าต้องการให้ DB บังคับทุก writer ให้เปลี่ยนเป็น `BEFORE UPDATE` trigger ใน T-0038 แทน
+
+
+## 12. Branch schedule contract proposal (T-0013)
+
+สถานะ: **proposed — human merge required**. Zo อนุญาตให้จัดทำ spec/card PR ตามคำแนะนำ ไม่ใช่การอนุมัติว่า business decisions ด้านล่าง merge แล้ว. ข้อ G1–G5 เป็นข้อเสนอที่เลือกคำตอบชัดเจนสำหรับ review; ใช้เป็น authoritative contract หลังมนุษย์ merge เท่านั้น. ห้ามเริ่ม implementation/dispatch T-0013 ก่อน merge; ไม่มี runtime/schema change ใน PR นี้.
+
+<a id="contract-branch-schedule-common"></a>
+### กติการ่วมของ schedule endpoints
+
+- ใช้ `/api/v1` prefix เดิม; สี่ routes ตามตาราง endpoints เท่านั้น ไม่มี hours GET/closure PATCH. คง guard sequencing, F02/F04/F07/F09 และ permissions เดิม: owner/manager เขียน, ทั้งห้า roles อ่าน closure list ภายใน branch scope; suspended org อ่านได้แต่เขียนไม่ได้. Platform flag ไม่ bypass membership.
+- `branchId`/`closureId` ต้อง UUID ตาม contract เดิม; normalize UUID เป็น lowercase หลัง validation. ตรวจ parent branch ภายใน tenant transaction แม้ list ว่าง; missing/foreign/unassigned branch → `NOT_FOUND` สำหรับผู้เรียกที่ผ่าน permission แล้ว. Closure ต้องตรงทั้ง org, branchId และ closureId; same-org wrong-branch/missing/foreign closure → `NOT_FOUND`.
+- Body ของ PUT/POST ต้อง strict JSON object ทุกระดับ; unknown/system/tenant keys, missing required fields, wrong types และ invalid path → `VALIDATION_FAILED` (400) พร้อม `details.fields`. ไม่ coerce number/string/null. ใช้ dotted field paths เช่น `items.0.opensAt`, `items` สำหรับจำนวน/weekday ที่ขาด, `items.<index>.weekday` สำหรับซ้ำ/ผิดค่า, `endDate` สำหรับ reversed range; root body ใช้ `_` ตาม pipe เดิม.
+- **ไม่มี query parameters ที่รองรับ** ทั้งสี่ routes: query key ใด ๆ (รวม filter/cursor/page/repeated keys) → `VALIDATION_FAILED` พร้อม field ของ key นั้น ไม่ ignore และไม่เพิ่ม pagination/filter โดยปริยาย. GET/DELETE ไม่รับ request body; nonempty body → `VALIDATION_FAILED` ที่ `_` (absent/zero-byte body ยอมรับ). ไม่แก้ common guards เพื่อ enforce กติกานี้.
+- Errors ที่ใช้: `UNAUTHENTICATED`, `VALIDATION_FAILED`, `FORBIDDEN`, `PASSWORD_CHANGE_REQUIRED`, `NOT_FOUND`, `INTERNAL`; writes เพิ่ม `ORG_SUSPENDED`. ไม่เพิ่ม `CONFLICT`/plan/rate errors สำหรับ schedule; infra/DB/invariant failure → sanitized `INTERNAL` และ rollback. ใช้ envelope/status เดิมใน #errors.
+
+<a id="contract-branch-hours"></a>
+### G1 — hours PUT wire contract และ no-op
+
+- รับ `{ items: [{ weekday, opensAt, closesAt }] }` เท่านั้น: exactly 7 entries, integer weekdays 1–7 อย่างละหนึ่ง; ทั้งสอง time keys required, เป็น null ทั้งคู่ (ปิด) หรือ string ทั้งคู่ที่ opensAt < closesAt. ห้าม equal/reversed/overnight intervals.
+- เวลาเป็น ASCII `HH:mm` เท่านั้น (`00:00`–`23:59`); reject seconds/fractions/offset/24:00/whitespace ไม่ trim หรือ round เวลา. Persist ใน existing time columns; canonical output เป็น HH:mm.
+- ตอบ **200** `{ items: [{ weekday, opensAt, closesAt }] }` เรียง weekday asc. นี่คือ exact projection: ไม่มี id, branchId, orgId, timestamps, version หรือ field อื่น แม้ §5 จะมีกติกา row DTO ทั่วไป.
+- Lock parent ก่อนอ่าน/compare/update week. ต้องมี persisted 7 weekdays ตรง invariant มิฉะนั้น `INTERNAL` ไม่ repair. เทียบ semantic time values (DB อาจคืน HH:mm:ss) ไม่เทียบ raw representation; persisted non-minute precision ที่ไม่ตรง input ต้องถือเป็นการเปลี่ยน ไม่ truncate แล้วปลอม no-op.
+- ถ้าเท่ากันทุกวัน: return projection เดิม ไม่ UPDATE children/parent ไม่เปลี่ยน timestamp/version และไม่มี event/audit. ถ้าเปลี่ยน: UPDATE เฉพาะ day rows ที่เปลี่ยน, preserve IDs/createdAt, updatedAt = ctx.now; parent bump/event หนึ่งครั้งตาม G4.
+
+<a id="contract-branch-closures"></a>
+### G2 — closure CRUD และ exact DTO
+
+- POST รับ `{ startDate, endDate, reason? }` เท่านั้น; startDate/endDate required ตาม G3. reason omitted หรือ explicit null → null; string trim ด้วย ECMAScript trim แล้วต้องยาว 1–500 Unicode code points (เทียบ PostgreSQL char_length), blank/เกินขอบ → `VALIDATION_FAILED`; reject U+0000 และ lone surrogate ใน reason ก่อน SQL เป็น field validation (PostgreSQL UTF-8 text เก็บไม่ได้).
+- POST ตอบ **201** `Closure` โดยตรง. `Closure` exact shape = `{ id, branchId, startDate, endDate, reason, createdAt, updatedAt }`; UUID strings lowercase, local date strings ตาม G3, reason key มีเสมอ (string/null), timestamps canonical UTC ISO `YYYY-MM-DDTHH:mm:ss.sssZ` จาก ctx.now ตอน create. ไม่ส่ง orgId/version/fields อื่น.
+- DELETE item route `/branches/{branchId}/closures/{closureId}` เท่านั้น → **204 ไม่มี body**; repeated/absent delete → `NOT_FOUND` ไม่ใช่ idempotent success. ลบเฉพาะ selected record.
+- GET collection → **200** `{ items: Closure[] }`, ทุก rows ของ branch รวม past/overlap ไม่มี filter/pagination; เรียง startDate asc, endDate asc, id asc (PostgreSQL UUID ordering). Empty → `{ items: [] }`; no write/version/event/audit. ไม่มี closure update endpoint.
+
+<a id="rule-branch-closure-calendar"></a>
+### G3 — calendar, overlap และ booking boundary
+
+- Local dates ต้อง exact ASCII `YYYY-MM-DD`, ปี **0001–9999** เท่านั้น (ไม่รับ 0000, signed/expanded years, BC, infinity, datetime, offset หรือ whitespace). Validate real proleptic Gregorian calendar รวม leap years และ startDate <= endDate; ไม่ใช้ regex อย่างเดียวหรือ JS Date ที่ normalize invalid dates/ปี 00–99. ช่วงนี้อยู่ภายใน PostgreSQL date AD range และ round-trip ได้ด้วย four-digit wire format; ไม่อ้างว่ารองรับ PostgreSQL date ทุกค่าที่ DB เก็บได้.
+- start/end เป็น **inclusive** local dates ของ Asia/Bangkok; ไม่ convert ผ่าน UTC midnight. Past, overlapping และ identical ranges ยอมรับเป็น independent records; effective closure เป็น union. ไม่มี overlap check/unique/exclusion constraint หรือ CONFLICT ใหม่; ลบหนึ่ง record ไม่ลบ overlapping records.
+- เปลี่ยน settings เท่านั้น: ไม่ cancel/reject/reschedule bookings ที่มีอยู่ย้อนหลัง และไม่ implement availability/booking ในการ์ดนี้. Future booking services ต้องมี approved availability และ concurrent booking-vs-settings protocol ของตัวเอง; ข้อเสนอนี้ไม่อ้างว่าป้องกัน concurrent booking ได้แล้ว.
+
+<a id="rule-branch-schedule-outbox"></a>
+### G4 — parent serialization, version และ invalidation event
+
+- ทุก effective hours PUT/closure POST/closure DELETE ใช้ ctx.db.run transaction เดียว: lock parent branch ด้วย existing lockBranch ก่อนอ่าน/แก้ children; child mutation → focused parent `UPDATE ... SET version = version + 1, updated_at = ctx.now ... RETURNING version` → appendOutbox หนึ่ง `branch.hours_changed` → commit. ห้าม rewrite basic/payment fields เพื่อ bump version.
+- Schedule writers และ existing branch.update ใช้ parent-first lock order เดียวกัน. Parallel hours replacements ไม่ทิ้ง mixed week; parallel delete หนึ่งสำเร็จอีกคำขอ NOT_FOUND; effective writes ได้ unique monotonic parent versions. ไม่ใช้ constant version, max(outbox)+1 หรือ child counter; #rule-branch-version ยังคงไม่รับประกันเลข event ต่อเนื่อง.
+- Outbox: org_id = current org; branch_id = aggregate_id = target branch.id; aggregate_type = `branch`; aggregate_version = returned parent version; occurred_at = ctx.now. **Exact payload `{ branchId, version }`** เป็น invalidation signal ไม่ใช่ Branch DTO/snapshot/changedFields; ไม่รวม reason/PromptPay. #rule-branch-outbox ใช้เฉพาะ branch.created/updated ไม่ขยาย payload มา schedule.
+- GET/no-op PUT/rejected request ไม่ bump parent ไม่ enqueue. ทุก failure รวมหลัง child write/ตอน enqueue rollback children, parent timestamps/version และ outbox ทั้งหมด. Child application timestamps ใช้ ctx.now; preserve createdAt ของ existing hours rows. Relay/consumer delivery และ schedule read API สำหรับ future consumers ไม่อยู่ในการ์ดนี้; minimal event ไม่ใช่ promise ว่ามี consumer พร้อมแล้ว.
+
+<a id="rule-branch-schedule-audit"></a>
+### G5 — audit และ scope gate
+
+ไม่สร้าง audit entry สำหรับ schedule mutations ใน T-0013 เพราะ §6 ไม่มี action นี้; ห้าม reuse branch.updated audit หรือ invent schedule action. Outbox ยังคง required และต้องทดสอบ rollback. การเพิ่ม audit ต้อง human-approved amendment ระบุ action/entity/before-after/privacy และ tests แยกก่อน.
+
+ขอบเขตหนึ่ง implementation card: สี่ endpoints, existing schema/org module/permissions, no dependencies/migrations/UI/payments/auth changes/booking/relay/new hours read. วางแผนและวัด <600 non-test changed LOC ตาม AGENTS; ถ้าไม่พอหยุดขอ human-assigned split ไม่ mint T-0013A/B หรือใช้ T-0014. Card ที่แนบเป็น proposed จน human spec/card merge; merge ไม่ได้พิสูจน์ runtime tests หรือ dispatch implementation อัตโนมัติ.
