@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { branch, membership, membershipBranch, organization, withTenant } from "@app/db";
+import { branch, membership, membershipBranch, organization, subscription, withTenant } from "@app/db";
 import type { Role } from "@app/domain";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { AUTH, type Auth } from "../../src/modules/identity";
@@ -40,4 +40,26 @@ export async function seedOrg(
     .map((c) => c.split(";")[0])
     .join("; ");
   return { userId: signed.user.id, orgId, branchIds, cookie, password, headers: { cookie, "x-org-id": orgId } };
+}
+
+/**
+ * Gives `orgId` a subscription on a fresh test plan. The plan is written on the platform connection (the runtime role
+ * cannot write plans, like the Q-0005 seed); the subscription goes through the tenant helper.
+ */
+export async function seedSubscription(
+  infra: TestInfra,
+  orgId: string,
+  plan: { maxBranches: number | null; isActive?: boolean; currentPeriodEnd?: Date | null },
+) {
+  const created = await infra.platformDb.$client.query<{ id: string }>(
+    "insert into plan (code, name, max_branches, max_staff, price_satang_per_month, is_active) values ($1, 'Test plan', $2, 5, 0, $3) returning id",
+    [`test_${randomUUID()}`, plan.maxBranches, plan.isActive ?? true],
+  );
+  const planId = created.rows[0]!.id;
+  await withTenant(infra.runtimeDb, orgId, (tx) =>
+    tx
+      .insert(subscription)
+      .values({ orgId, planId, startedAt: new Date("2026-01-01T00:00:00Z"), currentPeriodEnd: plan.currentPeriodEnd ?? null }),
+  );
+  return planId;
 }
