@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, numeric, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, integer, numeric, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { organization } from "./organization";
 
 // docs/spec/features/foundation.md#tbl-branch
@@ -19,6 +19,9 @@ export const branch = pgTable(
     timezone: text().notNull().default("Asia/Bangkok"),
     promptpayId: text(),
     isActive: boolean().notNull().default(true),
+    // Outbox aggregate_version (#rule-branch-version): every UPDATE sets version = version + 1 in the same
+    // statement (application-owned, no trigger).
+    version: integer().notNull().default(1),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
@@ -29,5 +32,6 @@ export const branch = pgTable(
     check("branch_timezone_mvp", sql`${t.timezone} = 'Asia/Bangkok'`),
     // F08: mobile 0XXXXXXXXX or 13-digit tax ID (the tax-ID checksum is validated in the use case).
     check("branch_promptpay_id_format", sql`${t.promptpayId} ~ '^(0[0-9]{9}|[0-9]{13})$'`),
+    check("branch_version_positive", sql`${t.version} >= 1`),
   ],
 );
