@@ -33,7 +33,8 @@ T-0008 กับ T-0009 ทำขนานกันได้
 | card | งาน | human_review |
 |---|---|---|
 | [T-0011](T-0011.md) | `auth.signup` atomic + verify-first; depends T-0034, T-0035, T-0036, T-0037 | ✓ |
-| T-0012 | `org.get`, `org.update`, `branch.list`, `branch.create` (F05), `branch.update` | |
+| [T-0038](T-0038.md) | `branch.version` column (aggregate version for branch outbox events) | |
+| [T-0012](T-0012.md) | `org.get`, `org.update`, `branch.list`, `branch.create` (F05), `branch.update`; depends T-0038 | |
 | T-0013 | `branch.hours.put`, `branch.closure.*` | |
 | T-0014 | `branch.paymentSettings.update` (F08) | ✓ |
 | T-0015 | `staff.list`, `staff.invite`, `staff.invitation.revoke`, `invitation.accept` (F03) | |
