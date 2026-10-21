@@ -140,8 +140,10 @@ it("isManaged alone grants the verification exemption, retaining must-change and
     expect(good.json()).toEqual({ twoFactorRequired: false, mustChangePassword: true });
     denied(await login(identifier, "wrong-password"));
   }
-  await withTenant(infra.runtimeDb, f.orgId, (tx) =>
-    transactionQuery(tx)`UPDATE membership SET status = 'removed' WHERE user_id = ${f.id}`,
+  await withTenant(
+    infra.runtimeDb,
+    f.orgId,
+    (tx) => transactionQuery(tx)`UPDATE membership SET status = 'removed' WHERE user_id = ${f.id}`,
   );
   const current = await sessions(f.id);
   for (const identifier of [f.email, f.username]) denied(await login(identifier));
