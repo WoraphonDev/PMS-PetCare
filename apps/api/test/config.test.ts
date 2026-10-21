@@ -44,3 +44,11 @@ describe("loadConfig", () => {
     expect(message).not.toContain("s3cr3t");
   });
 });
+
+it("accepts only an explicit IP/CIDR proxy allowlist", () => {
+  expect(loadConfig(valid).TRUSTED_PROXY_CIDRS).toBeUndefined();
+  expect(loadConfig({ ...valid, TRUSTED_PROXY_CIDRS: "10.0.0.0/24, ::1" }).TRUSTED_PROXY_CIDRS).toEqual(["10.0.0.0/24", "::1"]);
+  for (const value of ["true", "1", "*", "", "10.0.0.0/99", "proxy.example.com"]) {
+    expect(() => loadConfig({ ...valid, TRUSTED_PROXY_CIDRS: value })).toThrow(/TRUSTED_PROXY_CIDRS/);
+  }
+});
