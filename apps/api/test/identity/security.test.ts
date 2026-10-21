@@ -13,7 +13,11 @@ beforeAll(async () => {
   infra = await createTestInfra();
   app = await bootTestApp([], undefined, infra);
   const auth = app.get<Auth>(AUTH);
-  await auth.api.signUpEmail({ body: { email: "sec@example.com", password: PASSWORD, name: "Sec", username: "groomer-joe" } });
+  const signed = await auth.api.signUpEmail({
+    body: { email: "sec@example.com", password: PASSWORD, name: "Sec", username: "groomer-joe" },
+  });
+  // CSRF/session positive fixture represents a verified account.
+  await infra.platformDb.$client.query('update "user" set email_verified = true where id = $1', [signed.user.id]);
 }, 180_000);
 
 afterAll(async () => {
