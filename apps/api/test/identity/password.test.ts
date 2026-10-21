@@ -24,10 +24,12 @@ const nextIp = () => `10.20.${Math.floor(++ip / 250)}.${ip % 250}`;
 /** Direct SQL on the platform connection for fixture tweaks (no drizzle-orm import needed in apps/api). */
 const sql = (text: string, values: unknown[]) => infra.platformDb.$client.query(text, values);
 
-async function signUp(email: string, username?: string) {
+async function signUp(email: string, username?: string, verified = false) {
   const res = await auth.api.signUpEmail({
     body: { email, password: PASSWORD, name: email.split("@")[0] ?? "x", ...(username ? { username } : {}) },
   });
+  // Opt in only for password/session regressions that start with a verified real-email identity.
+  if (verified) await sql('update "user" set email_verified = true where id = $1', [res.user.id]);
   return res.user;
 }
 
@@ -171,7 +173,7 @@ describe("auth.passwordForgot", () => {
 
 describe("auth.passwordReset", () => {
   it("valid token → 204, new password works, old one does not, every session revoked, one audit row", async () => {
-    const u = await signUp("reset@example.com");
+    const u = await signUp("reset@example.com", undefined, true);
     const s1 = cookieOf(await login("reset@example.com"));
     const s2 = cookieOf(await login("reset@example.com"));
     expect((await me(s1)).statusCode).toBe(200);
@@ -203,7 +205,7 @@ describe("auth.passwordReset", () => {
   });
 
   it("an expired token (older than 1 hour) → 400 VALIDATION_FAILED with details.fields.token", async () => {
-    await signUp("expired@example.com");
+    await signUp("expired@example.com", undefined, true);
     await forgot("expired@example.com");
     const token = tokenFromMail("expired@example.com");
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -216,7 +218,7 @@ describe("auth.passwordReset", () => {
   });
 
   it("is atomic: if the audit insert fails, password, sessions and token stay unchanged", async () => {
-    await signUp("atomic@example.com");
+    await signUp("atomic@example.com", undefined, true);
     const cookie = cookieOf(await login("atomic@example.com"));
     await forgot("atomic@example.com");
     const token = tokenFromMail("atomic@example.com");
@@ -256,7 +258,7 @@ describe("auth.passwordChange", () => {
   });
 
   it("wrong current password → 401 UNAUTHENTICATED; password unchanged", async () => {
-    await signUp("wrong@example.com");
+    await signUp("wrong@example.com", undefined, true);
     const cookie = cookieOf(await login("wrong@example.com"));
     const res = await post("/auth/password/change", { currentPassword: "not-my-password", newPassword: NEW_PASSWORD }, { cookie });
     expect(res.statusCode).toBe(401);
@@ -265,7 +267,7 @@ describe("auth.passwordChange", () => {
   });
 
   it("success → 204, mustChangePassword false, other sessions revoked, current session kept", async () => {
-    const u = await signUp("change@example.com", "change.me");
+    const u = await signUp("change@example.com", "change.me", true);
     await sql(`update "user" set must_change_password = true where id = $1`, [u.id]);
     const current = cookieOf(await login("change.me"));
     const other = cookieOf(await login("change.me"));
@@ -281,7 +283,7 @@ describe("auth.passwordChange", () => {
   });
 
   it("is atomic: if clearing must_change_password fails, password and other sessions stay unchanged", async () => {
-    const u = await signUp("atomic-change@example.com");
+    const u = await signUp("atomic-change@example.com", undefined, true);
     const current = cookieOf(await login("atomic-change@example.com"));
     const other = cookieOf(await login("atomic-change@example.com"));
     const admin = (q: string) => infra.db.migratorDb.$client.query(q);
@@ -301,7 +303,7 @@ describe("auth.passwordChange", () => {
   });
 
   it("a reset that lands between verifying and saving wins: the change is refused (401), the reset password stays", async () => {
-    await signUp("race@example.com");
+    await signUp("race@example.com", undefined, true);
     const cookie = cookieOf(await login("race@example.com"));
     await forgot("race@example.com");
     const token = tokenFromMail("race@example.com");
@@ -326,7 +328,7 @@ describe("auth.passwordChange", () => {
   });
 
   it("new password policy → 400 VALIDATION_FAILED on newPassword", async () => {
-    await signUp("policy@example.com");
+    await signUp("policy@example.com", undefined, true);
     const cookie = cookieOf(await login("policy@example.com"));
     const res = await post("/auth/password/change", { currentPassword: PASSWORD, newPassword: "short" }, { cookie });
     expect(res.statusCode).toBe(400);
