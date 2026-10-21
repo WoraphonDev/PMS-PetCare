@@ -49,6 +49,8 @@ export function createAuth(config: Config, db: Db | Tx, email: EmailSender, capt
       username({ minUsernameLength: 3, maxUsernameLength: 40, usernameValidator: (u) => USERNAME.test(u) }),
       twoFactorPlugin({ backupCodeOptions: { amount: 10 }, trustDeviceMaxAge: 30 * 24 * 60 * 60 }),
     ],
+    // The signup instance logs duplicate addresses and raw DB errors (constraint detail carries the email); callers map errors.
+    ...(captureVerification ? { logger: { disabled: true } } : {}),
     // Our own limiter (F11) counts failed logins per identifier + IP; Better Auth's per-path limiter would double count.
     rateLimit: { enabled: false },
     advanced: {

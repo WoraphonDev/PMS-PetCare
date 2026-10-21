@@ -29,7 +29,7 @@ import { hasTwoFactorSession } from "./two-factor-session";
           // These public JSON operations never consult/refresh a supplied session or accept a callback URL.
           if (
             req.method === "POST" &&
-            ["/api/v1/auth/email/verify", "/api/v1/auth/email/verification/resend"].includes(req.routeOptions.url)
+            ["/api/v1/auth/signup", "/api/v1/auth/email/verify", "/api/v1/auth/email/verification/resend"].includes(req.routeOptions.url)
           )
             return Promise.resolve(null);
           return resolve(req);

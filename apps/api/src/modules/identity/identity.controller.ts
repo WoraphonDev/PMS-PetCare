@@ -6,6 +6,8 @@ import {
   AuthPasswordChangeRequest,
   AuthPasswordForgotRequest,
   AuthPasswordResetRequest,
+  AuthSignupRequest,
+  type AuthSignupResponse,
   AuthTwoFactorDisableRequest,
   AuthTwoFactorEnableRequest,
   AuthTwoFactorVerifyRequest,
@@ -21,7 +23,15 @@ import { EMAIL_SENDER, type EmailSender } from "../notification/email";
 import { AUTH, type Auth, toHeaders } from "./auth";
 import { type AuthedRequest, AuthGuard } from "./auth.guard";
 import { BACKGROUND, type BackgroundWork } from "./background";
-import { type FailureLimiter, FORGOT_LIMITER, LOGIN_LIMITER, RESEND_LIMITER, type ResendLimiter } from "./rate-limit";
+import {
+  type FailureLimiter,
+  FORGOT_LIMITER,
+  LOGIN_LIMITER,
+  RESEND_LIMITER,
+  type ResendLimiter,
+  SIGNUP_LIMITER,
+  type SignupLimiter,
+} from "./rate-limit";
 import { authEmailVerificationResend } from "./use-cases/auth.email.verification.resend";
 import { authEmailVerify } from "./use-cases/auth.email.verify";
 import { authLogin } from "./use-cases/auth.login";
@@ -29,6 +39,7 @@ import { authLogout } from "./use-cases/auth.logout";
 import { authPasswordChange } from "./use-cases/auth.password_change";
 import { authPasswordForgot } from "./use-cases/auth.password_forgot";
 import { authPasswordReset } from "./use-cases/auth.password_reset";
+import { authSignup } from "./use-cases/auth.signup";
 import { authTwoFactor } from "./use-cases/auth.two-factor";
 import { meGet } from "./use-cases/me.get";
 
@@ -44,12 +55,24 @@ export class IdentityController {
     @Inject(AUTH) private readonly auth: Auth,
     @Inject(RUNTIME_DB) private readonly runtimeDb: Db,
     @Inject(RESEND_LIMITER) private readonly resendLimiter: ResendLimiter,
+    @Inject(SIGNUP_LIMITER) private readonly signupLimiter: SignupLimiter,
     @Inject(PLATFORM_DB) private readonly platformDb: Db,
     @Inject(LOGIN_LIMITER) private readonly limiter: FailureLimiter,
     @Inject(FORGOT_LIMITER) private readonly forgotLimiter: FailureLimiter,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(BACKGROUND) private readonly background: BackgroundWork,
   ) {}
+
+  @Post("auth/signup")
+  @HttpCode(201)
+  signup(@Body(new ZodBody(AuthSignupRequest)) body: AuthSignupRequest, @Req() req: { ip: string }): Promise<AuthSignupResponse> {
+    return authSignup({ now: this.clock.now(), ip: req.ip }, body, {
+      db: this.runtimeDb,
+      config: this.config,
+      email: this.email,
+      limiter: this.signupLimiter,
+    });
+  }
 
   @Post("auth/email/verify")
   @HttpCode(204)

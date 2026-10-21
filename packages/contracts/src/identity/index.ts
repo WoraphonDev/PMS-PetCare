@@ -3,6 +3,7 @@ export { AUTH_EMAIL_VERIFY_STATUS, AuthEmailVerifyRequest } from "./auth.email.v
 export { AuthLoginRequest, AuthLoginResponse } from "./auth.login";
 export { AUTH_LOGOUT_STATUS } from "./auth.logout";
 export { AUTH_PASSWORD_STATUS, AuthPasswordChangeRequest, AuthPasswordForgotRequest, AuthPasswordResetRequest } from "./auth.password";
+export { AUTH_SIGNUP_STATUS, AuthSignupRequest, AuthSignupResponse } from "./auth.signup";
 export {
   AuthTwoFactorDisableRequest,
   AuthTwoFactorEnableRequest,

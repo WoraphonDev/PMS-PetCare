@@ -169,3 +169,28 @@ export async function verificationRecipientEmail(tx: Tx, userId: string): Promis
   if (!recipient) throw new Error("Verification recipient missing");
   return recipient.email;
 }
+
+/**
+ * #rule-signup-atomic: serializes every signup writer on the canonical email until the transaction ends, including
+ * the absent-user race, then reports whether an identity already exists (legacy mixed-case rows included).
+ */
+export async function lockSignupEmail(tx: Tx, email: string): Promise<{ taken: boolean }> {
+  await transactionQuery(tx)`SELECT pg_advisory_xact_lock(hashtextextended(${`pms:signup-email:${email}`}, 0))`;
+  return { taken: await emailTaken(tx, email) };
+}
+
+export async function emailTaken(tx: Tx, email: string): Promise<boolean> {
+  const { rows } = await transactionQuery(tx)<{ id: string }>`SELECT id FROM "user" WHERE lower(email) = ${email} LIMIT 1`;
+  return rows.length > 0;
+}
+
+/**
+ * Better Auth answers a duplicate email with a synthetic success: trust the returned id only if this transaction
+ * persisted that user and its credential account for this exact email.
+ */
+export async function isCreatedIdentity(tx: Tx, userId: string, email: string): Promise<boolean> {
+  const { rows } = await transactionQuery(tx)<{ id: string }>`
+    SELECT u.id FROM "user" u JOIN account a ON a.user_id = u.id AND a.provider_id = 'credential'
+     WHERE u.id = ${userId} AND u.email = ${email}`;
+  return rows.length === 1;
+}
