@@ -22,7 +22,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await infra?.stop();
 });
-async function seed(options: { emailVerified?: boolean; isManaged?: boolean } = {}) {
+async function seed(options: { emailVerified?: boolean; isManaged?: boolean; email?: string } = {}) {
   const id = randomUUID();
   let orgId: string | undefined;
   if (options.isManaged) {
@@ -85,11 +85,69 @@ it("rejects malformed, unsigned, tampered, wrong-purpose, change-email and nativ
     ]);
     await invalid(token);
   }
-  await invalid("malformed");
+  for (const token of ["malformed", "a.b.c", "%%%.e30.signature", "bm90LWpzb24.e30.signature"]) await invalid(token);
   const parts = valid.split(".");
   parts[1] = Buffer.from(JSON.stringify({ ...payload, nonce: randomUUID() })).toString("base64url");
   await invalid(parts.join("."));
   await invalid(`${parts[0]}.${parts[1]}.`);
+  expect((await identity(id))!.emailVerified).toBe(false);
+});
+
+it("verifies a unique legacy mixed-case address without rewriting it", async () => {
+  const email = `Legacy-${randomUUID()}@Example.COM`;
+  const id = await seed({ email });
+  const token = (await issue(id))!;
+  expect(await verifyJWT(token, secret)).toMatchObject({ email: email.toLowerCase() });
+  expect(await consume(token)).toBe(id);
+  expect(await identity(id)).toMatchObject({ email, emailVerified: true });
+  expect(await states(id)).toEqual([]);
+});
+
+it("fails closed for historical case variants regardless of which account owns the current digest", async () => {
+  const email = `legacy-${randomUUID()}@example.com`;
+  const lower = await seed({ email });
+  const upper = await seed({ email: email.toUpperCase() });
+  const tokens = [(await issue(lower))!, (await issue(upper))!];
+  for (const token of tokens) await invalid(token);
+  for (const id of [lower, upper]) {
+    expect((await identity(id))!.emailVerified).toBe(false);
+    expect(await states(id)).toHaveLength(1);
+  }
+  expect((await identity(lower))!.email).toBe(email);
+  expect((await identity(upper))!.email).toBe(email.toUpperCase());
+});
+
+it("rejects a token after its address is rebound to another account, even with that account's current state", async () => {
+  const id = await seed();
+  const email = (await identity(id))!.email;
+  const old = (await issue(id))!;
+  await infra.runtimeDb.$client.query('UPDATE "user" SET email = $1 WHERE id = $2', [`${randomUUID()}@example.com`, id]);
+  const inheritor = await seed({ email });
+  const current = (await issue(inheritor))!;
+  await invalid(old);
+  expect((await identity(id))!.emailVerified).toBe(false);
+  expect((await identity(inheritor))!.emailVerified).toBe(false);
+  expect(JSON.parse((await states(inheritor))[0]!.value).digest).toBe(digest(current));
+  expect(await consume(current)).toBe(inheritor);
+  expect(await states(id)).toHaveLength(1);
+});
+
+it("reports only a fixed sanitized category for each state invariant failure", async () => {
+  const diagnostic = vi.fn();
+  const observed = createEmailVerificationRepository(secret, diagnostic);
+  const id = await seed();
+  const token = (await issue(id))!;
+  const [row] = await states(id);
+  await infra.runtimeDb.insert(verification).values({ ...row!, id: randomUUID() });
+  const consumeObserved = () => infra.runtimeDb.transaction((tx) => observed.consumeEmailVerification(tx, token, now()));
+  await expect(consumeObserved()).rejects.toMatchObject({ code: "INTERNAL" });
+  await infra.runtimeDb.$client.query("DELETE FROM verification WHERE identifier = $1", [key(id)]);
+  for (const value of ["invalid-json", JSON.stringify({ purpose: "email-verify", version: 1, digest: token })]) {
+    await infra.runtimeDb.insert(verification).values({ ...row!, value });
+    await expect(consumeObserved()).rejects.toMatchObject({ code: "INTERNAL" });
+    await infra.runtimeDb.$client.query("DELETE FROM verification WHERE identifier = $1", [key(id)]);
+  }
+  expect(diagnostic.mock.calls).toEqual(Array.from({ length: 3 }, () => ["verification-state-invariant"]));
   expect((await identity(id))!.emailVerified).toBe(false);
 });
 

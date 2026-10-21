@@ -44,6 +44,12 @@ it("pinned public signer authenticates a random nonce and uses its internal cloc
   }
 });
 
+it("pinned public verifier returns null rather than throwing for malformed JWT segments", async () => {
+  for (const token of ["malformed", "a.b.c", "%%%.e30.signature", "bm90LWpzb24.e30.signature"]) {
+    await expect(verifyJWT(token, secret)).resolves.toBeNull();
+  }
+});
+
 function auth(db: Db | Tx, capture: (id: string) => Promise<void>) {
   return betterAuth({
     secret,

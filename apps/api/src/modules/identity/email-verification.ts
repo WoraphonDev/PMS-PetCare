@@ -8,12 +8,18 @@ const namespace = (id: string) => `pms:email-verify:v1:${id}`;
 const digestOf = (token: string) => createHash("sha256").update(token).digest("hex");
 const invalid = () =>
   new AppError("VALIDATION_FAILED", "Invalid verification token", { fields: { token: ["Invalid verification token"] } });
-const invariant = () => new AppError("INTERNAL", "Email verification state invariant");
 type LockedUser = { id: string; email: string; email_verified: boolean; is_managed: boolean };
 const eligible = (user: LockedUser) => !user.email_verified && !user.is_managed && !user.email.endsWith("@managed.invalid");
 
 /** Identity-owned verification state. Every operation must use its caller's outer transaction. */
-export function createEmailVerificationRepository(secret: string) {
+export function createEmailVerificationRepository(
+  secret: string,
+  diagnostic: (category: "verification-state-invariant") => void = () => {},
+) {
+  const invariant = () => {
+    diagnostic("verification-state-invariant");
+    return new AppError("INTERNAL", "Email verification state invariant");
+  };
   return {
     async issueEmailVerification(tx: Tx, userId: string, now: Date): Promise<string | null> {
       const query = transactionQuery(tx);
@@ -36,7 +42,8 @@ export function createEmailVerificationRepository(secret: string) {
     },
 
     async consumeEmailVerification(tx: Tx, token: string, now: Date): Promise<string> {
-      // Library verifies signature and signed expiry using its narrowly permitted internal Date clock.
+      // Pinned public verifier returns null for malformed tokens; it also checks signature and signed expiry.
+      // Its internal Date clock is covered by the narrow spec exception.
       const payload = await verifyJWT<Record<string, unknown>>(token, secret);
       if (
         payload?.purpose !== "email-verify" ||
@@ -49,10 +56,12 @@ export function createEmailVerificationRepository(secret: string) {
       )
         throw invalid();
       const query = transactionQuery(tx);
+      // The signer lowercases email; historical text-unique rows may contain case variants.
+      // Reject ambiguity before reading namespace state; never choose an account by digest or rewrite email.
       const { rows: users } =
-        await query<LockedUser>`SELECT id, email, email_verified, is_managed FROM "user" WHERE email = ${payload.email} FOR UPDATE`;
+        await query<LockedUser>`SELECT id, email, email_verified, is_managed FROM "user" WHERE lower(email) = ${payload.email} ORDER BY id FOR UPDATE`;
       const user = users[0];
-      if (!user || user.email !== payload.email || !eligible(user)) throw invalid();
+      if (users.length !== 1 || !user || user.email.toLowerCase() !== payload.email || !eligible(user)) throw invalid();
       const identifier = namespace(user.id);
       const { rows } = await query<{
         id: string;
@@ -81,7 +90,7 @@ export function createEmailVerificationRepository(secret: string) {
       // Native expired cleanup may remove expired state; it can never make a failed delete succeed.
       if (removed.rowCount !== 1) throw invalid();
       const updated =
-        await query`UPDATE "user" SET email_verified = true, updated_at = ${now} WHERE id = ${user.id} AND email = ${payload.email} AND email_verified = false AND is_managed = false`;
+        await query`UPDATE "user" SET email_verified = true, updated_at = ${now} WHERE id = ${user.id} AND email = ${user.email} AND email_verified = false AND is_managed = false`;
       if (updated.rowCount !== 1) throw invariant();
       return user.id;
     },
