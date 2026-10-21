@@ -1,4 +1,4 @@
-import { type Db, type user, withPlatform } from "@app/db";
+import { type Db, type Tx, transactionQuery, type user, withPlatform } from "@app/db";
 
 // Queries use drizzle's relational API (`db.query.*`): its operators come from the same drizzle instance as the
 // @app/db schema, so apps/api needs no drizzle-orm dependency of its own.
@@ -155,3 +155,17 @@ export async function membershipsOf(platformDb: Db, userId: string) {
 }
 
 export { createEmailVerificationRepository } from "./email-verification";
+
+/** Lock before recipient eligibility/rotation, including legacy mixed-case addresses. */
+export async function findVerificationRecipient(tx: Tx, email: string): Promise<string | null> {
+  const { rows } = await transactionQuery(tx)<{ id: string }>`SELECT id FROM "user" WHERE lower(email) = ${email} ORDER BY id FOR UPDATE`;
+  if (rows.length > 1) throw new Error("Ambiguous verification recipient");
+  return rows[0]?.id ?? null;
+}
+
+/** Called after issuance holds the user lock, on that same transaction. */
+export async function verificationRecipientEmail(tx: Tx, userId: string): Promise<string> {
+  const recipient = await tx.query.user.findFirst({ where: (u, { eq }) => eq(u.id, userId) });
+  if (!recipient) throw new Error("Verification recipient missing");
+  return recipient.email;
+}

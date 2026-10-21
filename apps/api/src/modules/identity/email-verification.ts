@@ -9,7 +9,7 @@ const digestOf = (token: string) => createHash("sha256").update(token).digest("h
 const invalid = () =>
   new AppError("VALIDATION_FAILED", "Invalid verification token", { fields: { token: ["Invalid verification token"] } });
 type LockedUser = { id: string; email: string; email_verified: boolean; is_managed: boolean };
-const eligible = (user: LockedUser) => !user.email_verified && !user.is_managed && !user.email.endsWith("@managed.invalid");
+const eligible = (user: LockedUser) => !user.email_verified && !user.is_managed && !user.email.toLowerCase().endsWith("@managed.invalid");
 
 /** Identity-owned verification state. Every operation must use its caller's outer transaction. */
 export function createEmailVerificationRepository(

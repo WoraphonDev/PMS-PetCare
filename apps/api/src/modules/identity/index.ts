@@ -4,7 +4,7 @@ import { Global, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { CLOCK, type Clock } from "../../common/context";
 import { PLATFORM_DB } from "../../common/db";
-import { PasswordChangeGuard, REQUEST_SESSION, sessionResolver } from "../../common/session";
+import { PasswordChangeGuard, REQUEST_SESSION, type ResolveSession, sessionResolver } from "../../common/session";
 import { AUTH, type Auth, toHeaders } from "./auth";
 import { IdentityModule as IdentityCoreModule } from "./identity.module";
 import { findUserById } from "./identity.repository";
@@ -17,14 +17,24 @@ import { hasTwoFactorSession } from "./two-factor-session";
     {
       provide: REQUEST_SESSION,
       inject: [AUTH, PLATFORM_DB, CLOCK],
-      useFactory: (auth: Auth, db: Db, clock: Clock) =>
-        sessionResolver(async (headers) => {
+      useFactory: (auth: Auth, db: Db, clock: Clock): ResolveSession => {
+        const resolve = sessionResolver(async (headers) => {
           const found = await auth.api.getSession({ headers: toHeaders(headers) });
           if (!found) return null;
           const user = await findUserById(db, found.user.id);
           if (user?.twoFactorEnabled && !(await hasTwoFactorSession(db, found.session.id, user.id, clock.now()))) return null;
           return user ? { user, sessionId: found.session.id } : null;
-        }),
+        });
+        return (req) => {
+          // These public JSON operations never consult/refresh a supplied session or accept a callback URL.
+          if (
+            req.method === "POST" &&
+            ["/api/v1/auth/email/verify", "/api/v1/auth/email/verification/resend"].includes(req.routeOptions.url)
+          )
+            return Promise.resolve(null);
+          return resolve(req);
+        };
+      },
     },
     { provide: APP_GUARD, useClass: PasswordChangeGuard },
   ],
@@ -32,7 +42,7 @@ import { hasTwoFactorSession } from "./two-factor-session";
 })
 export class IdentityModule {}
 
-export { AUTH, type Auth, toHeaders } from "./auth";
+export { AUTH, type Auth, createAuth, toHeaders } from "./auth";
 export { type AuthedRequest, AuthGuard } from "./auth.guard";
 export { BACKGROUND, BackgroundWork } from "./background";
 export type { UserRow } from "./identity.repository";
@@ -48,3 +58,4 @@ export {
 } from "./rate-limit";
 export { hasTwoFactorSession, platformSession } from "./two-factor-session";
 export { captureVerificationAfterCommit } from "./verification-collector";
+export { captureSignupVerification } from "./verification-email";

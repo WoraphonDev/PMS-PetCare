@@ -14,7 +14,7 @@ const USERNAME = /^[a-z0-9._-]{3,40}$/;
  * Better Auth instance (ADR-0001). Its HTTP handler is NOT mounted: our controllers call `auth.api.*` so every
  * route keeps our contract and error envelope. Identity tables carry no org_id (no RLS) — the platform connection is used.
  */
-export function createAuth(config: Config, db: Db | Tx, email: EmailSender) {
+export function createAuth(config: Config, db: Db | Tx, email: EmailSender, captureVerification?: (userId: string) => Promise<void>) {
   return betterAuth({
     secret: config.BETTER_AUTH_SECRET,
     baseURL: config.APP_ORIGIN,
@@ -22,6 +22,7 @@ export function createAuth(config: Config, db: Db | Tx, email: EmailSender) {
     database: drizzleAdapter(db, { provider: "pg", schema: { user, session, account, verification, twoFactor } }),
     emailAndPassword: {
       enabled: true,
+      autoSignIn: false,
       minPasswordLength: 10,
       maxPasswordLength: 128,
       // F11: single-use token, valid 1 hour. Better Auth's own link points at its (unmounted) handler — ours goes to the web app.
@@ -31,6 +32,16 @@ export function createAuth(config: Config, db: Db | Tx, email: EmailSender) {
         await email.send(resetPasswordEmail(config.APP_ORIGIN, user.email, token)).catch((err: unknown) => {
           new Logger("Email").error(`password reset email failed (${errorCode(err)})`);
         });
+      },
+    },
+    emailVerification: {
+      sendOnSignUp: Boolean(captureVerification),
+      sendOnSignIn: false,
+      autoSignInAfterVerification: false,
+      // Only the caller's transaction-local collector is allowed; native sender/link/token are discarded.
+      sendVerificationEmail: async ({ user }) => {
+        if (!captureVerification) throw new Error("Verification capture unavailable");
+        await captureVerification(user.id);
       },
     },
     // Same rule as the DB CHECK user_username_format (#tbl-identity) — Better Auth's default rejects "-".
