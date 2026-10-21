@@ -11,7 +11,7 @@ import {
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Req } from "@nestjs/common";
 import type { OrgRequestContext } from "../../common/context";
 import { OrgScoped, RequirePermission } from "../../common/tenant.guard";
-import { ZodBody } from "../../common/zod.pipe";
+import { OrgBody } from "./org-body.pipe";
 import { branchCreate } from "./use-cases/branch.create";
 import { branchList } from "./use-cases/branch.list";
 import { branchUpdate } from "./use-cases/branch.update";
@@ -33,7 +33,7 @@ export class OrgController {
 
   @Patch("org")
   @RequirePermission("org.settings.update")
-  update(@Req() req: Request, @Body(new ZodBody(OrgUpdateRequest)) body: OrgUpdateRequest): Promise<Organization> {
+  update(@Req() req: Request, @Body(new OrgBody(OrgUpdateRequest)) body: OrgUpdateRequest): Promise<Organization> {
     return orgUpdate(req.ctx, body);
   }
 
@@ -46,7 +46,7 @@ export class OrgController {
   @Post("branches")
   @HttpCode(BRANCH_CREATE_STATUS)
   @RequirePermission("branch.create")
-  createBranch(@Req() req: Request, @Body(new ZodBody(BranchCreateRequest)) body: BranchCreateRequest): Promise<Branch> {
+  createBranch(@Req() req: Request, @Body(new OrgBody(BranchCreateRequest)) body: BranchCreateRequest): Promise<Branch> {
     return branchCreate(req.ctx, body);
   }
 
@@ -54,8 +54,8 @@ export class OrgController {
   @RequirePermission("branch.update")
   updateBranch(
     @Req() req: Request,
-    @Param("branchId", new ZodBody(BranchIdParam)) branchId: string,
-    @Body(new ZodBody(BranchUpdateRequest)) body: BranchUpdateRequest,
+    @Param("branchId", new OrgBody(BranchIdParam)) branchId: string,
+    @Body(new OrgBody(BranchUpdateRequest)) body: BranchUpdateRequest,
   ): Promise<Branch> {
     return branchUpdate(req.ctx, branchId.toLowerCase(), body);
   }

@@ -4,7 +4,18 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { bootTestApp } from "../support/app";
 import { createTestInfra, type TestInfra } from "../support/infra";
 import { seedOrg, seedSubscription } from "../support/seed";
-import { auditOf, branchesOf, call, expectError, expectGuardErrors, hoursOf, outboxOf, ROLES, suspend } from "./support";
+import {
+  auditOf,
+  branchesOf,
+  call,
+  expectError,
+  expectGuardErrors,
+  expectUnknownKeysRejected,
+  hoursOf,
+  outboxOf,
+  ROLES,
+  suspend,
+} from "./support";
 
 // docs/spec/features/foundation.md#ep-branch.create · #contract-branch · #rule-branch-capacity · #rule-branch-outbox · §6
 const failOutbox = vi.hoisted(() => ({ on: false }));
@@ -183,6 +194,12 @@ describe("rejections create nothing", () => {
       const error = await expectError(await create(o.headers, body), 400, "VALIDATION_FAILED");
       expect(error.details, JSON.stringify(body)).toMatchObject({ fields: { [field]: expect.any(Array) } });
     }
+    await expectNothingCreated(o.orgId, 1);
+  });
+
+  it("reports unknown keys named like Object.prototype members as VALIDATION_FAILED, not INTERNAL", async () => {
+    const o = await ownerWithPlan(null);
+    await expectUnknownKeysRejected((body) => create(o.headers, body), { name: "B" });
     await expectNothingCreated(o.orgId, 1);
   });
 

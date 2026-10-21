@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { bootTestApp } from "../support/app";
 import { createTestInfra, type TestInfra } from "../support/infra";
 import { seedOrg } from "../support/seed";
-import { auditOf, call, expectError, expectGuardErrors, orgOf, outboxOf, ROLES, suspend } from "./support";
+import { auditOf, call, expectError, expectGuardErrors, expectUnknownKeysRejected, orgOf, outboxOf, ROLES, suspend } from "./support";
 
 // docs/spec/features/foundation.md#ep-org.update · #contract-org · §6 · #org-branch-technical-gates (1)
 const failAudit = vi.hoisted(() => ({ on: false }));
@@ -117,6 +117,14 @@ describe("rejections leave the organization unchanged", () => {
       const error = await expectError(await patch(o.headers, { displayName: "changed", [key]: value }), 400, "VALIDATION_FAILED");
       expect(error.details, key).toMatchObject({ fields: { [key]: expect.any(Array) } });
     }
+    expect(await orgOf(infra, o.orgId)).toEqual(before);
+    expect(await auditOf(infra, o.orgId)).toEqual([]);
+  });
+
+  it("reports unknown keys named like Object.prototype members as VALIDATION_FAILED, not INTERNAL", async () => {
+    const o = await owner();
+    const before = (await orgOf(infra, o.orgId))!;
+    await expectUnknownKeysRejected((body) => patch(o.headers, body), { displayName: "changed" });
     expect(await orgOf(infra, o.orgId)).toEqual(before);
     expect(await auditOf(infra, o.orgId)).toEqual([]);
   });

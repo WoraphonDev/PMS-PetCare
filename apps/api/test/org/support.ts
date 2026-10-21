@@ -68,4 +68,18 @@ export async function suspend(infra: TestInfra, orgId: string) {
   await infra.platformDb.$client.query("update organization set status = 'suspended' where id = $1", [orgId]);
 }
 
+/** Unknown keys named like Object.prototype members must still be reported as own `details.fields.<key>` entries. */
+export const PROTOTYPE_KEYS = ["toString", "constructor", "hasOwnProperty", "valueOf"] as const;
+export async function expectUnknownKeysRejected(
+  send: (body: Record<string, unknown>) => ReturnType<typeof call>,
+  base: Record<string, unknown>,
+) {
+  for (const key of PROTOTYPE_KEYS) {
+    const error = await expectError(await send({ ...base, [key]: "x" }), 400, "VALIDATION_FAILED");
+    const fields = (error.details as { fields: Record<string, unknown> }).fields;
+    expect(Object.hasOwn(fields, key), key).toBe(true);
+    expect(Array.isArray(fields[key]), key).toBe(true);
+  }
+}
+
 export const ROLES = ["owner", "manager", "front_desk", "groomer", "caretaker"] as const;

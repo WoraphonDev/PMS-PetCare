@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { bootTestApp } from "../support/app";
 import { createTestInfra, type TestInfra } from "../support/infra";
 import { seedOrg } from "../support/seed";
-import { auditOf, branchesOf, call, expectError, expectGuardErrors, outboxOf, suspend } from "./support";
+import { auditOf, branchesOf, call, expectError, expectGuardErrors, expectUnknownKeysRejected, outboxOf, suspend } from "./support";
 
 // docs/spec/features/foundation.md#ep-branch.update · #contract-branch · #rule-branch-version · #rule-branch-outbox ·
 // #org-branch-technical-gates · §6 · §8 (groomer branch.update → FORBIDDEN; other org id → NOT_FOUND)
@@ -173,6 +173,14 @@ describe("rejections leave the branch unchanged", () => {
     }
     expect(await rowOf(id)).toEqual(before);
     expect(await auditOf(infra, s.orgId)).toEqual([]);
+  });
+
+  it("reports unknown keys named like Object.prototype members as VALIDATION_FAILED, not INTERNAL", async () => {
+    const s = await seeded();
+    const before = await rowOf(s.branchIds[0]!);
+    await expectUnknownKeysRejected((body) => update(s.headers, s.branchIds[0]!, body), { name: "changed" });
+    expect(await rowOf(s.branchIds[0]!)).toEqual(before);
+    expect(await outboxOf(infra, s.orgId)).toEqual([]);
   });
 
   it("maps renaming onto another branch's name to CONFLICT", async () => {
