@@ -36,6 +36,7 @@ export { AUTH, type Auth, toHeaders } from "./auth";
 export { type AuthedRequest, AuthGuard } from "./auth.guard";
 export { BACKGROUND, BackgroundWork } from "./background";
 export type { UserRow } from "./identity.repository";
+export { createEmailVerificationRepository } from "./identity.repository";
 export { FailureLimiter } from "./rate-limit";
-
 export { hasTwoFactorSession, platformSession } from "./two-factor-session";
+export { captureVerificationAfterCommit } from "./verification-collector";

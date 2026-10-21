@@ -153,3 +153,5 @@ export async function membershipsOf(platformDb: Db, userId: string) {
     });
   });
 }
+
+export { createEmailVerificationRepository } from "./email-verification";
