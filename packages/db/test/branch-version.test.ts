@@ -76,9 +76,7 @@ describe("branch.version on the fully migrated schema", () => {
 
   it("rejects null version with a not-null violation", async () => {
     const err = await caught(
-      withTenant(t.runtimeDb, A, (tx) =>
-        tx.execute(sql`insert into branch (org_id, name, version) values (${A}, 'null-version', null)`),
-      ),
+      withTenant(t.runtimeDb, A, (tx) => tx.execute(sql`insert into branch (org_id, name, version) values (${A}, 'null-version', null)`)),
     );
     expect(err).toMatchObject({ code: "23502" });
   });
