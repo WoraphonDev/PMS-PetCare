@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from "node:crypto";
+import { membership, organization, withTenant } from "@app/db";
 import { Controller, Get, Module, UseGuards } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -50,6 +51,8 @@ function totp(uri: string, at = new Date()) {
 async function fixture(admin = false) {
   const email = `${randomUUID()}@example.com`;
   const u = await auth.api.signUpEmail({ body: { email, password: PASSWORD, name: "2fa" } });
+  // Enrollment/session regressions begin with an already verified real-email account.
+  await sql('update "user" set email_verified = true where id = $1', [u.user.id]);
   if (admin) await sql('update "user" set is_platform_admin = true where id = $1', [u.user.id]);
   const cookie = cookies(await login(email));
   return { email, id: u.user.id, cookie };
@@ -330,4 +333,63 @@ it("failed challenge attempts retain the plugin's rate limit across transactions
 it("logs contain no TOTP secrets, backup codes or passwords", () => {
   expect(secrets.length).toBeGreaterThan(0);
   for (const s of [...secrets, PASSWORD]) expect(logs.join("\n")).not.toContain(s);
+});
+
+it("unverified managed accounts retain must-change, 2FA and trusted-device behavior in both login modes", async () => {
+  mockTime();
+  const f = await enabled();
+  const orgId = randomUUID();
+  await withTenant(infra.runtimeDb, orgId, async (tx) => {
+    await tx.insert(organization).values({ id: orgId, slug: orgId, displayName: "Managed 2FA" });
+    await tx.insert(membership).values({ orgId, userId: f.id, role: "groomer", displayName: "Managed" });
+  });
+  await sql(
+    'update "user" set is_managed = true, managed_by_org_id = $1, email_verified = false, must_change_password = true, username = $2 where id = $3',
+    [orgId, "managed.2fa", f.id],
+  );
+  for (const identifier of [f.email, "managed.2fa"]) {
+    const pending = await login(identifier);
+    expect(pending.statusCode).toBe(200);
+    expect(pending.json()).toEqual({ twoFactorRequired: true, mustChangePassword: true });
+    expect((await me(cookies(pending))).statusCode).toBe(401);
+    const verified = await post("2fa/verify", { code: totp(f.totpUri), trustDevice: true }, cookies(pending));
+    expect(verified.statusCode).toBe(204);
+    expect((await me(cookies(verified))).json().user.mustChangePassword).toBe(true);
+    const trust = cookies(verified)
+      .split("; ")
+      .filter((c) => c.includes("trust_device"))
+      .join("; ");
+    expect(trust).not.toBe("");
+    const trusted = await login(identifier, trust);
+    expect(trusted.statusCode).toBe(200);
+    expect(trusted.json()).toEqual({ twoFactorRequired: false, mustChangePassword: true });
+    expect((await me(cookies(trusted))).statusCode).toBe(200);
+  }
+  expect((await sql('select email_verified from "user" where id = $1', [f.id])).rows).toEqual([{ email_verified: false }]);
+});
+
+it("a real-email account cannot use enrollment or a trusted device to bypass the verification gate", async () => {
+  mockTime();
+  const f = await enabled();
+  const verified = await post("2fa/verify", { code: totp(f.totpUri), trustDevice: true }, cookies(await login(f.email)));
+  expect(verified.statusCode).toBe(204);
+  const trust = cookies(verified)
+    .split("; ")
+    .filter((c) => c.includes("trust_device"))
+    .join("; ");
+  expect(trust).not.toBe("");
+  // Model a legacy unverified identity with existing F10 enrollment and a trusted device.
+  await sql('update "user" set email_verified = false, username = $1 where id = $2', ["legacy.2fa", f.id]);
+  const sessions = (await sql("select * from session where user_id = $1 order by id", [f.id])).rows;
+  const states = (await sql("select * from verification order by id")).rows;
+  for (const identifier of [f.email, "legacy.2fa"]) {
+    for (const cookie of ["", trust]) {
+      const denied = await login(identifier, cookie);
+      expect(denied.statusCode).toBe(401);
+      expect(denied.json()).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
+      expect(denied.headers["set-cookie"]).toBeUndefined();
+    }
+  }
+  expect((await sql("select * from session where user_id = $1 order by id", [f.id])).rows).toEqual(sessions);
+  expect((await sql("select * from verification order by id")).rows).toEqual(states);
 });

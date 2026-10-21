@@ -19,7 +19,7 @@ export interface AuthLoginResult {
 
 const invalid = () => new AppError("UNAUTHENTICATED", "Invalid credentials");
 
-// docs/spec/features/foundation.md#ep-auth.login · F09 · F11
+// docs/spec/features/foundation.md#ep-auth.login · #rule-email-login-policy · F09 · F11
 export async function authLogin(
   ctx: { ip: string; headers: Headers; now: Date },
   input: AuthLoginRequest,
@@ -34,10 +34,11 @@ export async function authLogin(
   };
 
   const u = await findUserByIdentifier(deps.platformDb, identifier);
-  // A disabled managed account (F09) must cost the same as a wrong password, so timing does not reveal it:
-  // hash the presented password, then fail. Unknown identifiers go through Better Auth's sign-in, which already
-  // runs a dummy hash for missing accounts.
-  if (u && !(await isManagedAccountActive(deps.platformDb, u))) {
+  // Deny unverified real-email and disabled managed accounts before Better Auth can create any session/cookie.
+  // Only isManaged grants the verification exemption; owning membership (F09) still applies.
+  // Hash the presented password so policy failures do password work like wrong-password failures.
+  // Unknown identifiers go through Better Auth's sign-in, which already runs a dummy hash for missing accounts.
+  if (u && ((!u.isManaged && !u.emailVerified) || !(await isManagedAccountActive(deps.platformDb, u)))) {
     await (await deps.auth.$context).password.hash(input.password);
     throw await fail();
   }

@@ -244,7 +244,10 @@ it("verification and resend ignore supplied must-change session cookies and mali
   const signed = await app
     .get<Auth>(AUTH)
     .api.signUpEmail({ body: { email: `${randomUUID()}@example.com`, name: "Cookie", password: "correct-horse-1" } });
-  await infra.runtimeDb.$client.query('UPDATE "user" SET must_change_password = true WHERE id = $1', [signed.user.id]);
+  // This fixture supplies a real authenticated cookie; recovery recipients below remain unverified.
+  await infra.runtimeDb.$client.query('UPDATE "user" SET email_verified = true, must_change_password = true WHERE id = $1', [
+    signed.user.id,
+  ]);
   const login = await app.inject({
     method: "POST",
     url: "/api/v1/auth/login",

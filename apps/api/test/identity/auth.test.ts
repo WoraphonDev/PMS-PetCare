@@ -19,10 +19,12 @@ const BR_A2 = randomUUID();
 let ann: { id: string; email: string };
 let staff: { id: string };
 
-async function signUp(email: string, username?: string) {
+async function signUp(email: string, username?: string, verified = false) {
   const res = await auth.api.signUpEmail({
     body: { email, password: PASSWORD, name: email.split("@")[0] ?? "x", ...(username ? { username } : {}) },
   });
+  // Only the explicit real-email positive fixtures model completed verification.
+  if (verified) await sql('update "user" set email_verified = true where id = $1', [res.user.id]);
   return res.user;
 }
 
@@ -41,8 +43,8 @@ beforeAll(async () => {
     });
   }
 
-  ann = await signUp("ann@example.com", "ann.k");
-  const other = await signUp("other@example.com");
+  ann = await signUp("ann@example.com", "ann.k", true);
+  const other = await signUp("other@example.com", undefined, true);
   staff = await signUp(`${randomUUID()}@managed.invalid`, "groomer.joe");
   await sql(`update "user" set is_managed = true, managed_by_org_id = $1, must_change_password = true where id = $2`, [ORG_A, staff.id]);
 

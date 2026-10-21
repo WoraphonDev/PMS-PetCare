@@ -27,6 +27,8 @@ export async function seedOrg(
       await tx.insert(membershipBranch).values({ orgId, membershipId: member!.id, branchId: branchIds[i]! });
     }
   });
+  // Positive authenticated tenant fixture: models an account that has completed email verification.
+  await infra.platformDb.$client.query('update "user" set email_verified = true where id = $1', [signed.user.id]);
   // Fixture identity update, deliberately outside the tenant interface (user has no RLS).
   if (options.mustChangePassword) {
     await infra.platformDb.$client.query('update "user" set must_change_password = true where id = $1', [signed.user.id]);
