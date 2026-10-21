@@ -2,12 +2,26 @@ import { randomUUID } from "node:crypto";
 import { AuthSignupRequest } from "@app/contracts";
 import { seedPlans, transactionQuery, user, withPlatform } from "@app/db";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createAuth } from "../../src/modules/identity/auth";
 import { isCreatedIdentity } from "../../src/modules/identity/identity.repository";
 import { EMAIL_SENDER, FakeEmailSender } from "../../src/modules/notification/email";
 import { bootTestApp, testConfig } from "../support/app";
 import { createTestInfra, type TestInfra } from "../support/infra";
+
+/** Runs after the real email lock + preflight; lets a test commit a writer outside the lock protocol in that gap. */
+const afterPreflight = vi.hoisted(() => ({ hook: null as null | ((email: string) => Promise<void>) }));
+vi.mock("../../src/modules/identity/identity.repository", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../src/modules/identity/identity.repository")>();
+  return {
+    ...original,
+    lockSignupEmail: async (...args: Parameters<typeof original.lockSignupEmail>) => {
+      const result = await original.lockSignupEmail(...args);
+      await afterPreflight.hook?.(args[1]);
+      return result;
+    },
+  };
+});
 
 let infra: TestInfra;
 let app: NestFastifyApplication;
@@ -435,6 +449,34 @@ describe("atomicity (#rule-signup-atomic, #accept-signup-verification)", () => {
       probe = r.rows[0];
     }
     expect(probe).toEqual({ pid: rows[0]!.pid, v: "", n: 0 });
+  });
+
+  it("answers CONFLICT over HTTP when Better Auth returns a synthetic success, with no tenant and no message", async () => {
+    const email = nextEmail();
+    const slug = nextSlug();
+    const outsiderId = randomUUID();
+    const before = mail.sent.length;
+    const counts = await rowCounts();
+    // Committed after our preflight saw no identity, before Better Auth looks the email up: the native call then
+    // returns its synthetic duplicate success instead of failing.
+    afterPreflight.hook = async (locked) => {
+      if (locked !== email) return;
+      await infra.platformDb.$client.query(`insert into "user" (id, name, email) values ($1, 'Outsider', $2)`, [outsiderId, email]);
+    };
+    let res: Awaited<ReturnType<typeof signup>>;
+    try {
+      res = await signup(valid({ email, orgSlug: slug }));
+    } finally {
+      afterPreflight.hook = null;
+    }
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ error: { code: "CONFLICT" } });
+    expect(res.headers["set-cookie"]).toBeUndefined();
+    expect((await users(email)).map((u) => u.id)).toEqual([outsiderId]);
+    expect(await accountsOf(outsiderId)).toHaveLength(0);
+    expect(await orgs(slug)).toHaveLength(0);
+    expect(mail.sent.slice(before)).toEqual([]);
+    expect(await rowCounts()).toEqual({ ...counts, user: (counts.user ?? 0) + 1 });
   });
 
   it("rejects a native synthetic success for an existing email (#rule-signup-atomic guard)", async () => {
