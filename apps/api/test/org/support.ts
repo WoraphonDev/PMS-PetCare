@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
+import { membership, membershipBranch, subscription, withTenant } from "@app/db";
+import type { Role } from "@app/domain";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { expect } from "vitest";
+import { AUTH, type Auth } from "../../src/modules/identity";
 import type { TestInfra } from "../support/infra";
 import { seedOrg } from "../support/seed";
 
@@ -204,4 +207,127 @@ export async function expectNoBodyRule(
     const empty = await chunked([]);
     expect(empty.statusCode, `empty chunked ${JSON.stringify(contentType)}: ${empty.body}`).toBe(ok);
   }
+}
+
+// --- T-0015 staff and invitations (#contract-staff-list, #contract-staff-invite) ---
+
+/** Subscription on a fresh plan with `maxStaff` seats (plan on the platform connection, like the Q-0005 seed). */
+export async function seedStaffPlan(infra: TestInfra, orgId: string, maxStaff: number | null) {
+  const created = await infra.platformDb.$client.query<{ id: string }>(
+    "insert into plan (code, name, max_branches, max_staff, price_satang_per_month, is_active) values ($1, 'Staff plan', 5, $2, 0, true) returning id",
+    [`test_${randomUUID()}`, maxStaff],
+  );
+  await withTenant(infra.runtimeDb, orgId, (tx) =>
+    tx.insert(subscription).values({ orgId, planId: created.rows[0]!.id, startedAt: new Date("2026-01-01T00:00:00Z") }),
+  );
+}
+
+/** Another member of `orgId` (real account, verified email). `status: "removed"` models a former member. */
+export async function addMember(
+  app: NestFastifyApplication,
+  infra: TestInfra,
+  orgId: string,
+  member: { role: Role; branchIds?: readonly string[]; status?: "active" | "removed"; displayName?: string; email?: string },
+) {
+  const email = member.email ?? `${randomUUID()}@example.com`;
+  const signed = await app
+    .get<Auth>(AUTH)
+    .api.signUpEmail({ body: { email, password: "correct-horse-1", name: member.displayName ?? "Member" } });
+  await infra.platformDb.$client.query('update "user" set email_verified = true where id = $1', [signed.user.id]);
+  const membershipId = await withTenant(infra.runtimeDb, orgId, async (tx) => {
+    const [row] = await tx
+      .insert(membership)
+      .values({
+        orgId,
+        userId: signed.user.id,
+        role: member.role,
+        displayName: member.displayName ?? "Member",
+        status: member.status ?? "active",
+      })
+      .returning();
+    for (const branchId of member.branchIds ?? []) await tx.insert(membershipBranch).values({ orgId, membershipId: row!.id, branchId });
+    return row!.id;
+  });
+  return { userId: signed.user.id, email, membershipId };
+}
+
+/** Managed account (F09) member: internal `<id>@managed.invalid` email that must never be shown. */
+export async function addManagedMember(infra: TestInfra, orgId: string, role: Role, branchIds: readonly string[], username: string) {
+  const userId = randomUUID();
+  await infra.platformDb.$client.query(
+    `insert into "user" (id, name, email, username, is_managed, managed_by_org_id, email_verified) values ($1, 'Managed', $2, $3, true, $4, false)`,
+    [userId, `${userId}@managed.invalid`, username, orgId],
+  );
+  return withTenant(infra.runtimeDb, orgId, async (tx) => {
+    const [row] = await tx.insert(membership).values({ orgId, userId, role, displayName: "Managed" }).returning();
+    for (const branchId of branchIds) await tx.insert(membershipBranch).values({ orgId, membershipId: row!.id, branchId });
+    return { userId, membershipId: row!.id };
+  });
+}
+
+/** Invitation row written directly (platform connection) for list/revoke fixtures in any state. */
+export async function insertInvitationRow(
+  infra: TestInfra,
+  row: {
+    orgId: string;
+    email: string;
+    role: Role;
+    branchIds?: readonly string[];
+    invitedByUserId: string;
+    expiresAt: Date;
+    createdAt?: Date;
+  },
+  state: { acceptedAt?: Date; revokedAt?: Date } = {},
+) {
+  const { rows } = await infra.platformDb.$client.query<{ id: string }>(
+    `insert into invitation (org_id, email, role, branch_ids, token_hash, expires_at, accepted_at, revoked_at, invited_by_user_id, created_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+    [
+      row.orgId,
+      row.email,
+      row.role,
+      row.branchIds ?? [],
+      randomUUID(),
+      row.expiresAt,
+      state.acceptedAt ?? null,
+      state.revokedAt ?? null,
+      row.invitedByUserId,
+      row.createdAt ?? new Date("2031-05-01T00:00:00Z"),
+    ],
+  );
+  return rows[0]!.id;
+}
+
+export async function invitationsOf(infra: TestInfra, orgId: string) {
+  return infra.platformDb.query.invitation.findMany({
+    where: (i, { eq }) => eq(i.orgId, orgId),
+    orderBy: (i, { asc }) => [asc(i.createdAt), asc(i.id)],
+  });
+}
+export async function membershipsOf(infra: TestInfra, orgId: string) {
+  return infra.platformDb.query.membership.findMany({ where: (m, { eq }) => eq(m.orgId, orgId) });
+}
+
+/**
+ * Holds the org's subscription row lock (#rule-staff-check-and-lock step 1) in another transaction until `release`.
+ * `waiting()` resolves once some other backend is blocked on a lock, so a test can change state mid-request.
+ */
+export async function holdSubscriptionLock(infra: TestInfra, orgId: string) {
+  const client = await infra.platformDb.$client.connect();
+  await client.query("begin");
+  await client.query("select 1 from subscription where org_id = $1 for update", [orgId]);
+  return {
+    async waiting() {
+      for (let i = 0; i < 200; i++) {
+        const { rows } = await infra.platformDb.$client.query<{ n: number }>("select count(*)::int as n from pg_locks where not granted");
+        if (rows[0]!.n > 0) return;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      throw new Error("no request ever waited on the subscription lock");
+    },
+    async release() {
+      await client.query("commit");
+      client.release();
+    },
+  };
 }
