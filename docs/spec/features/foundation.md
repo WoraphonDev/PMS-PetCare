@@ -325,8 +325,8 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 | <a id="ep-staff.invite"></a>`staff.invite` | `POST /staff/invitations` | `staff.invite` | `{ email, role, branchIds }` · F02, F03, F05 · ส่งอีเมล · audit `staff.invited` · #contract-staff-invite |
 | <a id="ep-staff.invitation.revoke"></a>`staff.invitation.revoke` | `DELETE /staff/invitations/{invitationId}` | `staff.invite` | 204 · #contract-staff-invitation-revoke |
 | <a id="ep-invitation.accept"></a>`invitation.accept` | `POST /invitations/accept` | user ที่ login แล้ว (สมัครใหม่ใน flow เดียวกัน: follow-up #rule-invite-signup-followup) | `{ token }` · F03 · audit `staff.joined` · #contract-invitation-accept |
-| <a id="ep-staff.account.create"></a>`staff.account.create` | `POST /staff/accounts` | `staff.invite` | `{ displayName, username, password, role, branchIds }` · F02, F05, F09 · `CONFLICT` เมื่อ username ซ้ำ · audit `staff.account_created` |
-| <a id="ep-staff.password.reset"></a>`staff.password.reset` | `PUT /staff/{membershipId}/password` | `staff.update` | `{ newPassword }` · F09 · audit `staff.password_reset` |
+| <a id="ep-staff.account.create"></a>`staff.account.create` | `POST /staff/accounts` | `staff.invite` | `{ displayName, username, password, role, branchIds }` · F02, F05, F09 · `CONFLICT` เมื่อ username ซ้ำ · audit `staff.account_created` · #contract-staff-account-create |
+| <a id="ep-staff.password.reset"></a>`staff.password.reset` | `PUT /staff/{membershipId}/password` | `staff.update` | `{ newPassword }` · F09 · audit `staff.password_reset` · #contract-staff-password-reset |
 | <a id="ep-staff.update"></a>`staff.update` | `PATCH /staff/{membershipId}` | `staff.update` | `{ role?, branchIds?, displayName? }` · F01, F02, ¹ · audit `staff.role_changed` |
 | <a id="ep-staff.remove"></a>`staff.remove` | `DELETE /staff/{membershipId}` | `staff.remove` | F01 · ล้าง session ของผู้ใช้ใน org นี้ · audit `staff.removed` |
 | <a id="ep-audit.list"></a>`audit.list` | `GET /audit-logs?from&to&action&actorUserId&cursor` | `audit.read` | เรียงใหม่ → เก่า, cursor pagination 50/หน้า |
@@ -456,6 +456,7 @@ resend: 3 schema-valid attempts / 3600s / normalized email **และ** 10 / 36
 
 บัญชี real-email ที่ emailVerified=false (รวมข้อมูลเก่า) login ทั้ง email และ username → UNAUTHENTICATED ตาม failure counter เดิม ไม่มี session/cookie; ขอ resend เพื่อ verify ได้ ไม่มี mass auto-verification
 บัญชี isManaged=true ยกเว้น real-email verification เท่านั้น ยังคง F09 active owning membership, must-change-password และ F10 2FA; ห้ามส่ง email ไป managed.invalid ทุกกรณี ไม่ใช้ suffix เพียงอย่างเดียวเป็นหลักฐานให้ bypass
+บัญชี isManaged=true login ด้วย **username เท่านั้น** (T-0016-05 A, อนุมัติโดยมนุษย์ 2026-10-23): identifier แบบ email (มี `@`) ที่ชี้ไปยังบัญชี managed — รวม `<user_id>@managed.invalid` — ถูกปฏิเสธเหมือนรหัสผ่านผิด: hash รหัสผ่านที่ส่งมาเหมือนเดิม, บันทึก failure counter, ตอบ `UNAUTHENTICATED`, ไม่มี session/cookie; ตัดสินจาก `is_managed` ของบัญชี ไม่ใช่จาก suffix
 ห้ามเปิด global requireEmailVerification โดยไม่ implement managed exception หรือ set managed.emailVerified=true เพื่อหลอกว่า verify จริง; app-level guard ต้องไม่ส่ง session ก่อนตรวจ policy และทดสอบทั้ง identifier modes
 CLOCK ใช้กับ application timestamps/limiter-facing time; อนุญาตเฉพาะ pinned Better Auth internal signup/verification Date ที่ไม่มี injection API; production ห้าม override global Date, isolated tests restore Date/fake timers เสมอ
 
@@ -745,3 +746,57 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 - ข้อความ "หรือสมัครใหม่ใน flow เดียวกัน" ใน #ep-invitation.accept และ "สมัครแล้วรับคำเชิญ" ใน #scr-invite-accept ยัง **ไม่มีผล** จนกว่าจะมี spec amendment สำหรับการสมัครที่ผูกกับ token คำเชิญ (สร้างเฉพาะ user ไม่สร้างร้าน) และการ์ดที่มนุษย์ออกเลขให้
 - ห้ามใช้ `auth.signup` (สร้างร้านใหม่เสมอ) เป็นทางแก้ชั่วคราว
 - T-0026 ส่ง flow สำหรับผู้ที่ login แล้วได้ก่อน; flow ผู้ที่ยังไม่มีบัญชีขึ้นกับ follow-up นี้
+
+
+## 15. Managed staff accounts contract (T-0016)
+
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0016-01 (A), T-0016-02 (A), T-0016-03 (A), T-0016-04 (A), T-0016-05 (A) บันทึกในไฟล์ `docs/questions/T-0016-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น; ห้ามเริ่ม implementation ก่อน merge. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
+
+<a id="rule-managed-account-roles"></a>
+### Role ของบัญชี managed
+
+ตาม F09 และ ¹ ตามที่เขียนไว้: owner สร้างบัญชี managed ได้ทุก role; manager สร้างได้เฉพาะ role ระดับสาขา (`front_desk`, `groomer`, `caretaker`) — ขอ `owner`/`manager` → `FORBIDDEN`. บัญชี managed ไม่มีการกู้รหัสทาง email; การรีเซ็ตทำได้ผ่าน #contract-staff-password-reset เท่านั้น
+
+<a id="rule-managed-account-identity"></a>
+### การสร้างแถว identity ของบัญชี managed
+
+- module `identity` มี public function ที่รันบน **tenant transaction เดียวกับ org** และเป็นผู้เขียนตาราง identity ทั้งหมด (ADR-0002; org ห้ามเขียนตาราง identity เอง)
+- สร้าง user id เอง แล้ว insert `user`: `name` = displayName, `email = <user_id>@managed.invalid`, `username`, `email_verified = false`, `is_managed = true`, `managed_by_org_id` = org, `must_change_password = true`; และ `account` (`provider_id 'credential'`, `account_id` = user id) ที่ password hash ด้วย hasher เดียวกับ Better Auth (login ด้วย username ทำงานตามเดิม)
+- ไม่สร้าง session, ไม่ส่งอีเมล, ห้ามตั้ง `email_verified = true`; ล้มเหลวที่ใด rollback ทั้งบัญชี membership และ audit
+- login ด้วย `<user_id>@managed.invalid` (หรือ email ใดที่ชี้ไปยังบัญชี managed) → ปฏิเสธตาม #rule-email-login-policy (T-0016-05 A); `PasswordChangeGuard` ไม่เปลี่ยน
+
+<a id="contract-staff-account-create"></a>
+### `staff.account.create`
+
+- `POST /staff/accounts` · `staff.invite` · strict body ตาม §11 `{ displayName, username, password, role, branchIds }`
+  - `displayName`: trim, 1–100 ตัวอักษร; ใช้เป็นทั้ง `membership.display_name` และ `user.name`
+  - `username`: trim แล้วแปลงเป็นตัวพิมพ์เล็ก แล้วต้องตรง `^[a-z0-9._-]{3,40}$`
+  - `password`: 10–128 ตัวอักษร (F11) ไม่ trim
+  - `role`, `branchIds`: กติกาเดียวกับ #contract-staff-invite
+- ลำดับ error (check แรกที่ไม่ผ่านเป็นคำตอบ):
+  1. guard เดิม (รวม `ORG_SUSPENDED`, `FORBIDDEN` permission)
+  2. body ผิด → `VALIDATION_FAILED` + `details.fields.<key>`
+  3. manager ขอ role `owner`/`manager` → `FORBIDDEN` (#rule-managed-account-roles)
+  4. role ระดับสาขาแต่ `branchIds` ว่าง → `BRANCH_REQUIRED`
+  5. phase 2 (#rule-staff-check-and-lock): lock subscription (ไม่มี → `INTERNAL`) แล้วอ่าน `organization.status` ซ้ำ → `ORG_SUSPENDED`
+  6. branch id ไม่อยู่ใน tenant → `NOT_FOUND` (F07)
+  7. #rule-staff-capacity → `PLAN_LIMIT_REACHED`
+  8. username ถูกใช้แล้วโดยบัญชีใดก็ได้ (ไม่สนตัวพิมพ์) → `CONFLICT`; unique violation จากการสร้างพร้อมกันก็ map เป็น `CONFLICT`
+- เขียนใน transaction เดียว: บัญชีตาม #rule-managed-account-identity, `membership` (`status 'active'`), `membership_branch`, audit `staff.account_created` (`entity_type 'membership'`, `entity_id` = membership id, `before` null, `after { username, displayName, role, branchIds }`)
+- ตอบ **201** `StaffMember` (#contract-staff-list; `email` null, `isManaged` true)
+- รหัสผ่านและ hash ห้ามอยู่ใน response, audit หรือ application log (รวม query params ของ error)
+
+<a id="contract-staff-password-reset"></a>
+### `staff.password.reset`
+
+- `PUT /staff/{membershipId}/password` · `staff.update` · strict body `{ newPassword }` (10–128, ไม่ trim)
+- ลำดับ error:
+  1. guard เดิม
+  2. `membershipId` ไม่ใช่ UUID หรือ body ผิด → `VALIDATION_FAILED`
+  3. tenant transaction: lock membership เป้าหมาย (ไม่ lock subscription — การรีเซ็ตไม่เปลี่ยนที่นั่ง) — ไม่พบ, เป็นของ org อื่น หรือ `removed` → `NOT_FOUND`
+  4. อ่าน `organization.status` ซ้ำ → `ORG_SUSPENDED`
+  5. ผู้เรียกเป็น manager และเป้าหมายเป็น `owner`/`manager` → `FORBIDDEN` (ตรวจก่อนข้อ 6 เพื่อไม่เปิดเผยว่าบัญชีของ owner เป็น managed หรือไม่)
+  6. บัญชีเป้าหมายไม่ใช่ managed หรือ managed โดย org อื่น → `MANAGED_ACCOUNT_ONLY`
+- เขียนใน transaction เดียว (ผ่าน public function ของ `identity`): password hash ใหม่, `must_change_password = true`, ลบ **ทุก** session ของบัญชีนั้น (รวม 2FA session markers); audit `staff.password_reset` (`entity_type 'membership'`, `entity_id` = membership id, `before`/`after` null)
+- ไม่เปลี่ยนการตั้งค่า 2FA; ผู้เรียกรีเซ็ต membership ของตัวเองได้ตามกติกาเดียวกัน (ไม่มีกรณีพิเศษ)
+- ตอบ **204** ไม่มี body
