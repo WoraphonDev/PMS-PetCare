@@ -4,6 +4,7 @@ export { BranchClosureListResponse, BranchScheduleParams, ScheduleQuery } from "
 export { BRANCH_CREATE_STATUS, BranchCreateRequest } from "./branch.create";
 export { BRANCH_HOURS_PUT_STATUS, BranchHoursPutRequest, BranchHoursPutResponse, HhMm } from "./branch.hours.put";
 export { Branch, BranchListResponse } from "./branch.list";
+export { BranchPaymentSettingsUpdateRequest } from "./branch.payment_settings.update";
 export { BranchIdParam, BranchUpdateRequest } from "./branch.update";
 export { Organization } from "./org.get";
 export { OrgUpdateRequest } from "./org.update";
