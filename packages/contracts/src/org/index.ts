@@ -9,6 +9,8 @@ export { BranchIdParam, BranchUpdateRequest } from "./branch.update";
 export { INVITATION_ACCEPT_STATUS, InvitationAcceptRequest, InvitationAcceptResponse } from "./invitation.accept";
 export { Organization } from "./org.get";
 export { OrgUpdateRequest } from "./org.update";
+export { STAFF_ACCOUNT_CREATE_STATUS, StaffAccountCreateRequest, Username } from "./staff.account.create";
 export { STAFF_INVITATION_REVOKE_STATUS, StaffInvitationParams } from "./staff.invitation.revoke";
 export { Invitation, STAFF_INVITE_STATUS, StaffInviteRequest } from "./staff.invite";
 export { PendingInvitation, StaffListResponse, StaffMember } from "./staff.list";
+export { STAFF_PASSWORD_RESET_STATUS, StaffMembershipParams, StaffPasswordResetRequest } from "./staff.password.reset";
