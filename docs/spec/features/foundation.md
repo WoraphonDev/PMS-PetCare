@@ -804,7 +804,16 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 ## 16. Staff update and remove contract (T-0017)
 
-สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0017-01 (A), T-0017-02 (A), T-0017-03 (A) บันทึกในไฟล์ `docs/questions/T-0017-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0017-01 (A), T-0017-02 (A), T-0017-03 (A) บันทึกในไฟล์ `docs/questions/T-0017-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. **รอมนุษย์ยืนยันตอน merge (agent เพิ่มหลัง review 2026-10-23, ไม่ใช่การตัดสินใจที่อนุมัติแล้ว):** #rule-staff-caller-recheck และตำแหน่งของมันในลำดับ error ด้านล่าง — ขยายจาก #rule-staff-check-and-lock (ตรวจสิ่งที่ phase 1 อ่านซ้ำหลังได้ lock) ไม่เพิ่ม code ใหม่. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
+
+<a id="rule-staff-caller-recheck"></a>
+### ตรวจผู้เรียกซ้ำใน phase 2
+
+- หลังได้ lock subscription และอ่าน `organization.status` ซ้ำ ก่อนอ่าน/lock เป้าหมายและก่อนเขียนใด ๆ: อ่าน membership ของผู้เรียกใน org นี้ใหม่ (ทุก writer ที่เปลี่ยน role/status ของ membership ถือ lock subscription ก่อน จึงค่าที่อ่านได้นิ่งจน commit)
+  - ไม่พบ หรือไม่ `active` → `FORBIDDEN` (เหมือน guard เดิม)
+  - role ปัจจุบันไม่มี permission ของ endpoint (`staff.update` / `staff.remove`) → `FORBIDDEN`
+  - กติกา ¹ ทุกข้อในลำดับ error ใช้ **role ปัจจุบันนี้** ไม่ใช้ role ที่ guard อ่านไว้ใน phase 1
+- ล้มที่ขั้นนี้ → rollback ไม่มี write หรือ audit
 
 <a id="contract-staff-update"></a>
 ### `staff.update`
@@ -814,8 +823,8 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 - ลำดับ error:
   1. guard เดิม
   2. id/body ผิด → `VALIDATION_FAILED`
-  3. phase 2 (#rule-staff-check-and-lock): lock subscription (ไม่มี → `INTERNAL`), อ่าน `organization.status` ซ้ำ → `ORG_SUSPENDED`, lock membership เป้าหมาย — ไม่พบ, org อื่น หรือ `removed` → `NOT_FOUND`
-  4. ผู้เรียกเป็น manager และ (เป้าหมายเป็น owner/manager หรือ role ใหม่เป็น owner/manager) → `FORBIDDEN` (รวม membership ของตัวเอง)
+  3. phase 2 (#rule-staff-check-and-lock): lock subscription (ไม่มี → `INTERNAL`), อ่าน `organization.status` ซ้ำ → `ORG_SUSPENDED`, ตรวจผู้เรียกซ้ำ (#rule-staff-caller-recheck) → `FORBIDDEN`, lock membership เป้าหมาย — ไม่พบ, org อื่น หรือ `removed` → `NOT_FOUND`
+  4. ผู้เรียก (role ปัจจุบันจากข้อ 3) เป็น manager และ (เป้าหมายเป็น owner/manager หรือ role ใหม่เป็น owner/manager) → `FORBIDDEN` (รวม membership ของตัวเอง)
   5. role ระดับสาขาโดยไม่มีสาขา → `BRANCH_REQUIRED`; branch id ไม่อยู่ใน tenant → `NOT_FOUND`
   6. ลด role ของ owner `active` คนสุดท้าย (รวมตัวเอง) → `LAST_OWNER` (F01; นับภายใต้ lock ข้อ 3)
   7. #rule-managed-account-roles
@@ -827,7 +836,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 ### `staff.remove`
 
 - `DELETE /staff/{membershipId}` · `staff.remove` · body/query ตามกติกา DELETE ของ #contract-branch-schedule-common · ตอบ **204**
-- ลำดับ error: guard เดิม → id ไม่ใช่ UUID → `VALIDATION_FAILED` → phase 2: lock subscription, `ORG_SUSPENDED` ซ้ำ, lock เป้าหมาย (ไม่พบ / org อื่น / `removed` แล้ว → `NOT_FOUND`) → manager กับเป้าหมาย owner/manager (รวมตัวเอง) → `FORBIDDEN` → owner `active` คนสุดท้าย → `LAST_OWNER`
+- ลำดับ error: guard เดิม → id ไม่ใช่ UUID → `VALIDATION_FAILED` → phase 2: lock subscription, `ORG_SUSPENDED` ซ้ำ, ตรวจผู้เรียกซ้ำ (#rule-staff-caller-recheck) → `FORBIDDEN`, lock เป้าหมาย (ไม่พบ / org อื่น / `removed` แล้ว → `NOT_FOUND`) → ผู้เรียก (role ปัจจุบัน) เป็น manager กับเป้าหมาย owner/manager (รวมตัวเอง) → `FORBIDDEN` → owner `active` คนสุดท้าย → `LAST_OWNER`
 - เขียนใน transaction เดียว: `status = 'removed'`, `updated_at`; เก็บแถว `membership_branch` ไว้เป็นประวัติ (เข้าร่วมใหม่ผ่าน #contract-invitation-accept จะแทนที่); audit `staff.removed` (`entity_type 'membership'`, `before { status: 'active', role, branchIds }`, `after { status: 'removed' }`)
 - session ("ล้าง session ของผู้ใช้ใน org นี้" มีความหมายดังนี้):
   - บัญชี managed ของ org นี้ → ลบ **ทุก** session ของบัญชีนั้น (บัญชีใช้งานไม่ได้แล้วตาม F09)
@@ -862,14 +871,14 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 ## 18. Platform admin contract (T-0019, T-0020)
 
-สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0019-01 (B), T-0019-02 (A), T-0019-03 (B), T-0020-01 (A), T-0020-02 (A) บันทึกในไฟล์ `docs/questions/`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม audit action `platform.org_viewed` (§6) และ endpoint `platform.plan.list`; ไม่เพิ่ม error code, permission, คอลัมน์ หรือ migration
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0019-01 (B), T-0019-02 (A), T-0019-03 (B), T-0020-01 (A), T-0020-02 (A) บันทึกในไฟล์ `docs/questions/`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม audit action `platform.org_viewed` (§6) และ endpoint `platform.plan.list`. **ยังไม่ตัดสิน (รอมนุษย์ — `docs/questions/T-0019-04.md`):** `org_id` ของแถว `platform.org_viewed`. ไม่เพิ่ม error code, permission, คอลัมน์ หรือ migration
 
 <a id="rule-platform-module"></a>
 ### โครงสร้างและการเข้าถึง
 
 - ทุก endpoint `platform.*` ใช้ `PlatformAdminGuard` เดิม: ไม่มี session → `UNAUTHENTICATED`; ไม่ใช่ platform admin → `FORBIDDEN`; ยังไม่ผ่าน 2FA → `TWO_FACTOR_REQUIRED`; ไม่ใช้ `X-Org-Id`; ร้านที่ถูกระงับไม่บล็อก `platform.*` (F04)
 - module ใหม่ `platform`; การอ่านข้ามร้านทำผ่าน public read function ของ `org` และ `subscription` บน platform connection (ADR-0003) และกรองอย่างชัดเจน; การเขียนทำใน tenant transaction ของร้านนั้น (`withTenant(orgId)` บน runtime connection) ผ่าน public function ของ module เจ้าของตาราง
-- audit `platform.org_viewed` ทุกครั้งที่อ่านรายละเอียดร้าน (`platform.org.get`): `org_id` = ร้านเป้าหมาย, actor = admin, `entity_type 'organization'`, `entity_id` = org id, `before`/`after` null; รายการค้นหา (`platform.org.list`) ไม่บันทึก
+- audit `platform.org_viewed` ทุกครั้งที่อ่านรายละเอียดร้าน (`platform.org.get`) — อนุมัติแล้ว (T-0019-03 B): `org_id` = **รอ T-0019-04** (agent แนะนำ: ร้านเป้าหมาย, เจ้าของร้านเห็นใน #contract-audit-list; ทางเลือก: null = แถวระดับ platform), actor = admin, `entity_type 'organization'`, `entity_id` = org id, `before`/`after` null; รายการค้นหา (`platform.org.list`) ไม่บันทึก
 - usage ทุกจุดใช้การนับของ #rule-branch-capacity และ #rule-staff-capacity
 
 <a id="contract-platform-org-read"></a>

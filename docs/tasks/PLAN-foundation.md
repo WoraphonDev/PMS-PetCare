@@ -44,9 +44,9 @@ T-0008 กับ T-0009 ทำขนานกันได้
 | [T-0042](T-0042.md) | `invitation.accept` for logged-in users with a verified email (§14 #contract-invitation-accept) + all accept races; depends T-0015 | |
 | *(unnumbered — follow-up of T-0015-06; number given by the human)* | invite-bound signup: user-only signup tied to an invitation token, no new shop (#rule-invite-signup-followup); needs a spec amendment first — never `auth.signup` as a workaround | |
 | [T-0016](T-0016.md) | `staff.account.create`, `staff.password.reset` (F09) — spec §15; T-0016-01…04 answered; **T-0016-05 open** (placeholder-email login, gates implementation); human merge of card + §15 before implementation; depends T-0015 | |
-| [T-0017](T-0017.md) | `staff.update`, `staff.remove` (F01, F02, F09) — spec §16; T-0017-01…03 answered; depends T-0015 (+ §15 roles) | |
+| [T-0017](T-0017.md) | `staff.update`, `staff.remove` (F01, F02, F09) — spec §16; T-0017-01…03 answered; caller re-check (#rule-staff-caller-recheck) pending human confirmation at merge; depends T-0015 (+ §15 roles) | |
 | [T-0018](T-0018.md) | `audit.list`, `subscription.get` + `audit_log` index migration — spec §17; T-0018-01…03 answered; depends T-0015 | |
-| [T-0019](T-0019.md) | `platform.org.list` / `get` (audit `platform.org_viewed`) / `setStatus` — new `platform` module; spec §18; depends T-0010, T-0015, T-0018 | |
+| [T-0019](T-0019.md) | `platform.org.list` / `get` (audit `platform.org_viewed`) / `setStatus` — new `platform` module; spec §18; **T-0019-04 open** (`org_id` of `platform.org_viewed`); depends T-0010, T-0015, T-0018 | |
 | [T-0020](T-0020.md) | `platform.org.setPlan` + `platform.plan.list` — spec §18; depends T-0019 | ✓ |
 | T-0021 | outbox relay worker (BullMQ/Valkey) + dead-letter + lag metric | |
 
