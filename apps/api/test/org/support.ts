@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { membership, membershipBranch, subscription, withTenant } from "@app/db";
 import type { Role } from "@app/domain";
@@ -276,6 +276,7 @@ export async function insertInvitationRow(
     invitedByUserId: string;
     expiresAt: Date;
     createdAt?: Date;
+    tokenHash?: string;
   },
   state: { acceptedAt?: Date; revokedAt?: Date } = {},
 ) {
@@ -287,7 +288,7 @@ export async function insertInvitationRow(
       row.email,
       row.role,
       row.branchIds ?? [],
-      randomUUID(),
+      row.tokenHash ?? randomUUID(),
       row.expiresAt,
       state.acceptedAt ?? null,
       state.revokedAt ?? null,
@@ -310,17 +311,21 @@ export async function membershipsOf(infra: TestInfra, orgId: string) {
 
 /**
  * Holds the org's subscription row lock (#rule-staff-check-and-lock step 1) in another transaction until `release`.
- * `waiting()` resolves once some other backend is blocked on a lock, so a test can change state mid-request.
+ * `waiting(n)` resolves once n backends are blocked on a lock, so a test can change state mid-request or fix the order
+ * in which competing requests get the lock (Postgres grants it to the waiters in arrival order).
  */
 export async function holdSubscriptionLock(infra: TestInfra, orgId: string) {
   const client = await infra.platformDb.$client.connect();
   await client.query("begin");
   await client.query("select 1 from subscription where org_id = $1 for update", [orgId]);
   return {
-    async waiting() {
+    /** Resolves once `backends` sessions are blocked on a lock (each competing request is one backend). */
+    async waiting(backends = 1) {
       for (let i = 0; i < 200; i++) {
-        const { rows } = await infra.platformDb.$client.query<{ n: number }>("select count(*)::int as n from pg_locks where not granted");
-        if (rows[0]!.n > 0) return;
+        const { rows } = await infra.platformDb.$client.query<{ n: number }>(
+          "select count(distinct pid)::int as n from pg_locks where not granted",
+        );
+        if (rows[0]!.n >= backends) return;
         await new Promise((r) => setTimeout(r, 25));
       }
       throw new Error("no request ever waited on the subscription lock");
@@ -330,4 +335,44 @@ export async function holdSubscriptionLock(infra: TestInfra, orgId: string) {
       client.release();
     },
   };
+}
+
+// --- T-0042 invitation accept (#contract-invitation-accept) ---
+
+/** A pending (or `state`) invitation whose token is known: `<orgId>.<32 random bytes base64url>`, SHA-256 stored. */
+export async function invitationWithToken(
+  infra: TestInfra,
+  row: { orgId: string; email: string; role: Role; branchIds?: readonly string[]; invitedByUserId: string; expiresAt: Date },
+  state: { acceptedAt?: Date; revokedAt?: Date } = {},
+) {
+  const token = `${row.orgId}.${randomBytes(32).toString("base64url")}`;
+  const id = await insertInvitationRow(infra, { ...row, tokenHash: createHash("sha256").update(token).digest("hex") }, state);
+  return { id, token };
+}
+
+/** A logged-in real-email account with a verified email and no membership (password "correct-horse-1"). */
+export async function signedInAccount(
+  app: NestFastifyApplication,
+  infra: TestInfra,
+  name = "Invitee",
+  email = `${randomUUID()}@example.com`,
+) {
+  const signed = await app.get<Auth>(AUTH).api.signUpEmail({ body: { email, password: "correct-horse-1", name } });
+  await infra.platformDb.$client.query('update "user" set email_verified = true where id = $1', [signed.user.id]);
+  return { userId: signed.user.id, email, cookie: await loginCookie(app, email) };
+}
+export async function loginCookie(app: NestFastifyApplication, identifier: string) {
+  const res = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { identifier, password: "correct-horse-1" } });
+  if (res.statusCode !== 200) throw new Error(`login failed: ${res.statusCode}`);
+  return ([] as string[])
+    .concat(res.headers["set-cookie"] ?? [])
+    .map((c) => c.split(";")[0])
+    .join("; ");
+}
+export async function membershipBranchesOf(infra: TestInfra, membershipId: string) {
+  const { rows } = await infra.platformDb.$client.query<{ branch_id: string }>(
+    "select branch_id from membership_branch where membership_id = $1 order by branch_id",
+    [membershipId],
+  );
+  return rows.map((r) => r.branch_id);
 }
