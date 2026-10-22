@@ -35,7 +35,9 @@ T-0008 กับ T-0009 ทำขนานกันได้
 | [T-0011](T-0011.md) | `auth.signup` atomic + verify-first; depends T-0034, T-0035, T-0036, T-0037 | ✓ |
 | [T-0038](T-0038.md) | `branch.version` column (aggregate version for branch outbox events) | |
 | [T-0012](T-0012.md) | `org.get`, `org.update`, `branch.list`, `branch.create` (F05), `branch.update`; depends T-0038 | |
+| [T-0039](T-0039.md) | per-test timeouts for multi-step 2FA tests (CI flake on main, T-0013-02); test only — merge before T-0013 | |
 | [T-0013](T-0013.md) | `branch.hours.put`, `branch.closure.*`; proposed §12 contracts/card — human merge before implementation | |
+| [T-0040](T-0040.md) | DELETE bodies without Content-Type reach the route (T-0013-01); depends T-0013 | |
 | T-0014 | `branch.paymentSettings.update` (F08) | ✓ |
 | T-0015 | `staff.list`, `staff.invite`, `staff.invitation.revoke`, `invitation.accept` (F03) | |
 | T-0016 | `staff.account.create`, `staff.password.reset` (F09) | |
