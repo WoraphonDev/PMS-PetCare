@@ -763,6 +763,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 - module `identity` มี public function ที่รันบน **tenant transaction เดียวกับ org** และเป็นผู้เขียนตาราง identity ทั้งหมด (ADR-0002; org ห้ามเขียนตาราง identity เอง)
 - สร้าง user id เอง แล้ว insert `user`: `name` = displayName, `email = <user_id>@managed.invalid`, `username`, `email_verified = false`, `is_managed = true`, `managed_by_org_id` = org, `must_change_password = true`; และ `account` (`provider_id 'credential'`, `account_id` = user id) ที่ password hash ด้วย hasher เดียวกับ Better Auth (login ด้วย username ทำงานตามเดิม)
 - ไม่สร้าง session, ไม่ส่งอีเมล, ห้ามตั้ง `email_verified = true`; ล้มเหลวที่ใด rollback ทั้งบัญชี membership และ audit
+- **ยังไม่ตัดสิน (รอมนุษย์ — `docs/questions/T-0016-05.md`):** login ด้วย `<user_id>@managed.invalid` ถูกปฏิเสธหรือไม่. จนกว่าจะตอบ: §15 ไม่เปลี่ยน login / `PasswordChangeGuard` และไม่กำหนดผลลัพธ์ของกรณีนี้
 
 <a id="contract-staff-account-create"></a>
 ### `staff.account.create`
