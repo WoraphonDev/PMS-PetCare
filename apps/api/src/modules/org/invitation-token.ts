@@ -11,3 +11,10 @@ export function newInvitationToken(orgId: string): { token: string; hash: string
   const token = `${orgId}.${randomBytes(32).toString("base64url")}`;
   return { token, hash: hashInvitationToken(token) };
 }
+
+const TOKEN = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.[A-Za-z0-9_-]{43}$/;
+
+/** The organization id of a well-formed token; null for anything else (→ INVITATION_INVALID). */
+export function invitationTokenOrg(token: string): string | null {
+  return TOKEN.exec(token)?.[1] ?? null;
+}

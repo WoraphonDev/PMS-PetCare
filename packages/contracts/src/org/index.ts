@@ -6,6 +6,7 @@ export { BRANCH_HOURS_PUT_STATUS, BranchHoursPutRequest, BranchHoursPutResponse,
 export { Branch, BranchListResponse } from "./branch.list";
 export { BranchPaymentSettingsUpdateRequest } from "./branch.payment_settings.update";
 export { BranchIdParam, BranchUpdateRequest } from "./branch.update";
+export { INVITATION_ACCEPT_STATUS, InvitationAcceptRequest, InvitationAcceptResponse } from "./invitation.accept";
 export { Organization } from "./org.get";
 export { OrgUpdateRequest } from "./org.update";
 export { STAFF_INVITATION_REVOKE_STATUS, StaffInvitationParams } from "./staff.invitation.revoke";

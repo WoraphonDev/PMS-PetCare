@@ -1,5 +1,5 @@
 import type { Invitation } from "@app/contracts";
-import { invitation, type Tx, transactionQuery } from "@app/db";
+import { invitation, membership, membershipBranch, type Tx, transactionQuery } from "@app/db";
 import type { Role } from "@app/domain";
 
 // Staff and invitation queries; every one runs on a tenant transaction (RLS = the caller's organization).
@@ -105,4 +105,37 @@ export async function listPendingInvitations(tx: Tx, now: Date): Promise<Invitat
 export async function isOrgSuspended(tx: Tx, orgId: string): Promise<boolean> {
   const org = await tx.query.organization.findFirst({ columns: { status: true }, where: (o, { eq }) => eq(o.id, orgId) });
   return org?.status !== "active";
+}
+
+/** #contract-invitation-accept step 6 preflight: unlocked read by token hash. */
+export async function findInvitationByHash(tx: Tx, tokenHash: string): Promise<InvitationRow | undefined> {
+  return tx.query.invitation.findFirst({ where: (i, { eq }) => eq(i.tokenHash, tokenHash) });
+}
+
+export async function markInvitationAccepted(tx: Tx, id: string, now: Date): Promise<void> {
+  await transactionQuery(tx)`UPDATE invitation SET accepted_at = ${now}, updated_at = ${now} WHERE id = ${id}`;
+}
+
+/** New membership (`display_name` from the account) or a removed one made active again, with the invited branches. */
+export async function joinMembership(
+  tx: Tx,
+  join: { orgId: string; userId: string; displayName: string; role: Role; branchIds: readonly string[]; existingId?: string },
+  now: Date,
+): Promise<string> {
+  let id = join.existingId;
+  if (id) {
+    await transactionQuery(tx)`UPDATE membership SET status = 'active', role = ${join.role}, updated_at = ${now} WHERE id = ${id}`;
+    await transactionQuery(tx)`DELETE FROM membership_branch WHERE membership_id = ${id}`;
+  } else {
+    const [row] = await tx
+      .insert(membership)
+      .values({ orgId: join.orgId, userId: join.userId, role: join.role, displayName: join.displayName, createdAt: now, updatedAt: now })
+      .returning();
+    if (!row) throw new Error("joinMembership: the insert returned no row");
+    id = row.id;
+  }
+  const membershipId = id;
+  for (const branchId of join.branchIds)
+    await tx.insert(membershipBranch).values({ orgId: join.orgId, membershipId, branchId, createdAt: now });
+  return membershipId;
 }
