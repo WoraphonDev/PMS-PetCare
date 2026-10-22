@@ -327,20 +327,21 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 | <a id="ep-invitation.accept"></a>`invitation.accept` | `POST /invitations/accept` | user ที่ login แล้ว (สมัครใหม่ใน flow เดียวกัน: follow-up #rule-invite-signup-followup) | `{ token }` · F03 · audit `staff.joined` · #contract-invitation-accept |
 | <a id="ep-staff.account.create"></a>`staff.account.create` | `POST /staff/accounts` | `staff.invite` | `{ displayName, username, password, role, branchIds }` · F02, F05, F09 · `CONFLICT` เมื่อ username ซ้ำ · audit `staff.account_created` · #contract-staff-account-create |
 | <a id="ep-staff.password.reset"></a>`staff.password.reset` | `PUT /staff/{membershipId}/password` | `staff.update` | `{ newPassword }` · F09 · audit `staff.password_reset` · #contract-staff-password-reset |
-| <a id="ep-staff.update"></a>`staff.update` | `PATCH /staff/{membershipId}` | `staff.update` | `{ role?, branchIds?, displayName? }` · F01, F02, ¹ · audit `staff.role_changed` |
-| <a id="ep-staff.remove"></a>`staff.remove` | `DELETE /staff/{membershipId}` | `staff.remove` | F01 · ล้าง session ของผู้ใช้ใน org นี้ · audit `staff.removed` |
-| <a id="ep-audit.list"></a>`audit.list` | `GET /audit-logs?from&to&action&actorUserId&cursor` | `audit.read` | เรียงใหม่ → เก่า, cursor pagination 50/หน้า |
-| <a id="ep-subscription.get"></a>`subscription.get` | `GET /subscription` | `subscription.read` | plan + การใช้งานปัจจุบัน (สาขา, พนักงาน) |
-| <a id="ep-platform.org.list"></a>`platform.org.list` | `GET /platform/orgs?q&status&cursor` | platform admin | |
-| <a id="ep-platform.org.get"></a>`platform.org.get` | `GET /platform/orgs/{orgId}` | platform admin | |
-| <a id="ep-platform.org.set_status"></a>`platform.org.setStatus` | `PUT /platform/orgs/{orgId}/status` | platform admin | `{ status, reason }` · audit `platform.org_status_changed` |
-| <a id="ep-platform.org.set_plan"></a>`platform.org.setPlan` | `PUT /platform/orgs/{orgId}/subscription` | platform admin | `{ planCode, currentPeriodEnd?, note? }` · audit `platform.plan_changed` · **human_review** |
+| <a id="ep-staff.update"></a>`staff.update` | `PATCH /staff/{membershipId}` | `staff.update` | `{ role?, branchIds?, displayName? }` · F01, F02, ¹ · audit `staff.role_changed` · #contract-staff-update |
+| <a id="ep-staff.remove"></a>`staff.remove` | `DELETE /staff/{membershipId}` | `staff.remove` | F01 · ล้าง session ตาม #contract-staff-remove · audit `staff.removed` |
+| <a id="ep-audit.list"></a>`audit.list` | `GET /audit-logs?from&to&action&actorUserId&cursor` | `audit.read` | เรียงใหม่ → เก่า, cursor pagination 50/หน้า · #contract-audit-list |
+| <a id="ep-subscription.get"></a>`subscription.get` | `GET /subscription` | `subscription.read` | plan + การใช้งานปัจจุบัน (สาขา, พนักงาน) · #contract-subscription-get |
+| <a id="ep-platform.org.list"></a>`platform.org.list` | `GET /platform/orgs?q&status&cursor` | platform admin | #contract-platform-org-read |
+| <a id="ep-platform.org.get"></a>`platform.org.get` | `GET /platform/orgs/{orgId}` | platform admin | audit `platform.org_viewed` · #contract-platform-org-read |
+| <a id="ep-platform.org.set_status"></a>`platform.org.setStatus` | `PUT /platform/orgs/{orgId}/status` | platform admin | `{ status, reason }` · audit `platform.org_status_changed` · #contract-platform-org-status |
+| <a id="ep-platform.org.set_plan"></a>`platform.org.setPlan` | `PUT /platform/orgs/{orgId}/subscription` | platform admin | `{ planCode, currentPeriodEnd?, note? }` · audit `platform.plan_changed` · **human_review** · #contract-platform-set-plan |
+| <a id="ep-platform.plan.list"></a>`platform.plan.list` | `GET /platform/plans` | platform admin | #contract-platform-plan-list |
 
 Response DTO ใช้ชื่อ camelCase ของคอลัมน์ใน §3 (ไม่ส่ง `token_hash`, `org_id` ภายใน); hours response เป็น projection ที่กำหนดเฉพาะใน #contract-branch-hours ไม่ใช่ row DTO
 
 ## 6. Audit actions
 
-`org.updated` · `branch.created` · `branch.updated` · `branch.payment_settings_updated` · `staff.invited` · `staff.joined` · `staff.account_created` · `staff.password_reset` · `staff.role_changed` · `staff.removed` · `auth.password_reset` · `auth.two_factor_enabled` · `auth.two_factor_disabled` · `platform.org_status_changed` · `platform.plan_changed`
+`org.updated` · `branch.created` · `branch.updated` · `branch.payment_settings_updated` · `staff.invited` · `staff.joined` · `staff.account_created` · `staff.password_reset` · `staff.role_changed` · `staff.removed` · `auth.password_reset` · `auth.two_factor_enabled` · `auth.two_factor_disabled` · `platform.org_status_changed` · `platform.plan_changed` · `platform.org_viewed` (§18)
 — เขียน **ใน transaction เดียวกับการเปลี่ยนข้อมูล**
 
 ## 7. หน้าจอ (PMS web)
@@ -800,3 +801,110 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 - เขียนใน transaction เดียว (ผ่าน public function ของ `identity`): password hash ใหม่, `must_change_password = true`, ลบ **ทุก** session ของบัญชีนั้น (รวม 2FA session markers); audit `staff.password_reset` (`entity_type 'membership'`, `entity_id` = membership id, `before`/`after` null)
 - ไม่เปลี่ยนการตั้งค่า 2FA; ผู้เรียกรีเซ็ต membership ของตัวเองได้ตามกติกาเดียวกัน (ไม่มีกรณีพิเศษ)
 - ตอบ **204** ไม่มี body
+
+
+## 16. Staff update and remove contract (T-0017)
+
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0017-01 (A), T-0017-02 (A), T-0017-03 (A) บันทึกในไฟล์ `docs/questions/T-0017-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. #rule-staff-caller-recheck และตำแหน่งของมันในลำดับ error ด้านล่าง **อนุมัติโดยมนุษย์ในแชท 2026-10-23** (หลัง review) — ขยายจาก #rule-staff-check-and-lock ไม่เพิ่ม code ใหม่. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
+
+<a id="rule-staff-caller-recheck"></a>
+### ตรวจผู้เรียกซ้ำใน phase 2
+
+- หลังได้ lock subscription และอ่าน `organization.status` ซ้ำ ก่อนอ่าน/lock เป้าหมายและก่อนเขียนใด ๆ: อ่าน membership ของผู้เรียกใน org นี้ใหม่ (ทุก writer ที่เปลี่ยน role/status ของ membership ถือ lock subscription ก่อน จึงค่าที่อ่านได้นิ่งจน commit)
+  - ไม่พบ หรือไม่ `active` → `FORBIDDEN` (เหมือน guard เดิม)
+  - role ปัจจุบันไม่มี permission ของ endpoint (`staff.update` / `staff.remove`) → `FORBIDDEN`
+  - กติกา ¹ ทุกข้อในลำดับ error ใช้ **role ปัจจุบันนี้** ไม่ใช้ role ที่ guard อ่านไว้ใน phase 1
+- ล้มที่ขั้นนี้ → rollback ไม่มี write หรือ audit
+
+<a id="contract-staff-update"></a>
+### `staff.update`
+
+- `PATCH /staff/{membershipId}` · `staff.update` · strict body ตาม §11 อย่างน้อย 1 ฟิลด์: `displayName` (trim 1–100; เปลี่ยนเฉพาะ `membership.display_name` ไม่แตะ `user.name`), `role` (`staff_role`), `branchIds` (UUID ไม่ซ้ำ)
+- สถานะหลังแก้ต้องถูกต้อง: role ระดับสาขาต้องมี ≥ 1 สาขา; owner/manager ไม่มีสาขา — เปลี่ยนเป็น owner/manager โดยไม่ส่ง `branchIds` = ล้างสาขา; เปลี่ยนจาก owner/manager เป็น role ระดับสาขาต้องส่ง `branchIds`
+- ลำดับ error:
+  1. guard เดิม
+  2. id/body ผิด → `VALIDATION_FAILED`
+  3. phase 2 (#rule-staff-check-and-lock): lock subscription (ไม่มี → `INTERNAL`), อ่าน `organization.status` ซ้ำ → `ORG_SUSPENDED`, ตรวจผู้เรียกซ้ำ (#rule-staff-caller-recheck) → `FORBIDDEN`, lock membership เป้าหมาย — ไม่พบ, org อื่น หรือ `removed` → `NOT_FOUND`
+  4. ผู้เรียก (role ปัจจุบันจากข้อ 3) เป็น manager และ (เป้าหมายเป็น owner/manager หรือ role ใหม่เป็น owner/manager) → `FORBIDDEN` (รวม membership ของตัวเอง)
+  5. role ระดับสาขาโดยไม่มีสาขา → `BRANCH_REQUIRED`; branch id ไม่อยู่ใน tenant → `NOT_FOUND`
+  6. ลด role ของ owner `active` คนสุดท้าย (รวมตัวเอง) → `LAST_OWNER` (F01; นับภายใต้ lock ข้อ 3)
+  7. #rule-managed-account-roles
+- ทุกค่าเท่าเดิม → 200 `StaffMember` ไม่เขียนอะไร
+- เขียนใน transaction เดียว: role, `display_name`, `updated_at`, แทน `membership_branch`; audit `staff.role_changed` ทุกครั้งที่มีการเปลี่ยนจริง โดย `before`/`after` เฉพาะฟิลด์ที่เปลี่ยน (`role`, `branchIds`, `displayName`)
+- ตอบ **200** `StaffMember` (#contract-staff-list)
+
+<a id="contract-staff-remove"></a>
+### `staff.remove`
+
+- `DELETE /staff/{membershipId}` · `staff.remove` · body/query ตามกติกา DELETE ของ #contract-branch-schedule-common · ตอบ **204**
+- ลำดับ error: guard เดิม → id ไม่ใช่ UUID → `VALIDATION_FAILED` → phase 2: lock subscription, `ORG_SUSPENDED` ซ้ำ, ตรวจผู้เรียกซ้ำ (#rule-staff-caller-recheck) → `FORBIDDEN`, lock เป้าหมาย (ไม่พบ / org อื่น / `removed` แล้ว → `NOT_FOUND`) → ผู้เรียก (role ปัจจุบัน) เป็น manager กับเป้าหมาย owner/manager (รวมตัวเอง) → `FORBIDDEN` → owner `active` คนสุดท้าย → `LAST_OWNER`
+- เขียนใน transaction เดียว: `status = 'removed'`, `updated_at`; เก็บแถว `membership_branch` ไว้เป็นประวัติ (เข้าร่วมใหม่ผ่าน #contract-invitation-accept จะแทนที่); audit `staff.removed` (`entity_type 'membership'`, `before { status: 'active', role, branchIds }`, `after { status: 'removed' }`)
+- session ("ล้าง session ของผู้ใช้ใน org นี้" มีความหมายดังนี้):
+  - บัญชี managed ของ org นี้ → ลบ **ทุก** session ของบัญชีนั้น (บัญชีใช้งานไม่ได้แล้วตาม F09)
+  - บัญชี real-email → ไม่ลบ session; guard ของร้านตรวจ `membership.status` ทุก request จึงบล็อกร้านนี้ทันที และร้านอื่นของผู้ใช้ไม่ได้รับผลกระทบ
+- การนำออกคืนที่นั่ง (#rule-staff-capacity)
+
+
+## 17. Audit list and subscription read contract (T-0018)
+
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0018-01 (B), T-0018-02 (A), T-0018-03 (A) บันทึกในไฟล์ `docs/questions/T-0018-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม index หนึ่งตัวบน `audit_log` (migration ที่ generate); ไม่เพิ่ม error code, permission หรือ audit action
+
+<a id="contract-audit-list"></a>
+### `audit.list`
+
+- `GET /audit-logs` · `audit.read` (owner) · query key ได้เฉพาะ `from`, `to`, `action`, `actorUserId`, `cursor` (key อื่น → `VALIDATION_FAILED`)
+  - `from`, `to`: ISO instant (UTC); `from` รวม, `to` ไม่รวม; ต้อง `from < to` และห่างกันไม่เกิน 366 วัน
+  - `action`: ต้องเป็นหนึ่งใน §6
+  - `actorUserId`: UUID (ไม่ตรงกับใคร → หน้าว่าง ไม่ใช่ `NOT_FOUND`)
+  - `cursor`: string ทึบจากหน้าก่อน; ผิดรูปแบบหรือถูกแก้ → `VALIDATION_FAILED`
+- ตอบ 200 `{ items: AuditEntry[], nextCursor: string | null }` หน้าละ 50 เรียง `occurredAt` ใหม่ → เก่า แล้ว `id` จากมากไปน้อย (keyset)
+- `AuditEntry = { id, occurredAt, action, entityType, entityId, actor: { userId, displayName } | null, before, after }`; `actor.displayName` = `membership.display_name` ของผู้ทำในร้านนี้ (รวมสมาชิกที่ถูกนำออก) ถ้าไม่มีใช้ชื่อบัญชี; `actor` null เมื่อ `actor_user_id` null; **ไม่ส่ง** `ip` และ `userAgent`
+- RLS: เห็นเฉพาะแถวของร้าน (แถวระดับ platform ที่ `org_id` null ไม่แสดง); อ่านได้แม้ร้านถูกระงับ (F04)
+- index: `audit_log (org_id, occurred_at desc, id desc)`
+
+<a id="contract-subscription-get"></a>
+### `subscription.get`
+
+- `GET /subscription` · `subscription.read` (owner, manager) → 200 `{ plan: { code, name, maxBranches, maxStaff, priceSatangPerMonth }, startedAt, currentPeriodEnd, usage: { branches, staff: { active, pendingInvitations, total } } }`
+- `usage.branches` = การนับของ #rule-branch-capacity; `usage.staff.total` = การนับของ #rule-staff-capacity (`active` + `pendingInvitations`); `maxBranches`/`maxStaff` null = ไม่จำกัด
+- ไม่ส่ง `note` และ `is_active` ของแพ็กเกจ; ไม่มีแถว subscription → `INTERNAL`; อ่านได้แม้ร้านถูกระงับ
+
+
+## 18. Platform admin contract (T-0019, T-0020)
+
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0019-01 (B), T-0019-02 (A), T-0019-03 (B), T-0020-01 (A), T-0020-02 (A) บันทึกในไฟล์ `docs/questions/`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม audit action `platform.org_viewed` (§6) และ endpoint `platform.plan.list`; T-0019-04 (A) อนุมัติโดยมนุษย์ในแชท 2026-10-23. ไม่เพิ่ม error code, permission, คอลัมน์ หรือ migration
+
+<a id="rule-platform-module"></a>
+### โครงสร้างและการเข้าถึง
+
+- ทุก endpoint `platform.*` ใช้ `PlatformAdminGuard` เดิม: ไม่มี session → `UNAUTHENTICATED`; ไม่ใช่ platform admin → `FORBIDDEN`; ยังไม่ผ่าน 2FA → `TWO_FACTOR_REQUIRED`; ไม่ใช้ `X-Org-Id`; ร้านที่ถูกระงับไม่บล็อก `platform.*` (F04)
+- module ใหม่ `platform`; การอ่านข้ามร้านทำผ่าน public read function ของ `org` และ `subscription` บน platform connection (ADR-0003) และกรองอย่างชัดเจน; การเขียนทำใน tenant transaction ของร้านนั้น (`withTenant(orgId)` บน runtime connection) ผ่าน public function ของ module เจ้าของตาราง
+- audit `platform.org_viewed` ทุกครั้งที่อ่านรายละเอียดร้าน (`platform.org.get`) (T-0019-03 B): `org_id` = ร้านเป้าหมาย (T-0019-04 A) เขียนใน tenant transaction ของร้านนั้นตามกติกาการเขียนข้อด้านบน — เจ้าของร้านเห็นใน #contract-audit-list, actor = admin, `entity_type 'organization'`, `entity_id` = org id, `before`/`after` null; รายการค้นหา (`platform.org.list`) ไม่บันทึก
+- usage ทุกจุดใช้การนับของ #rule-branch-capacity และ #rule-staff-capacity
+
+<a id="contract-platform-org-read"></a>
+### `platform.org.list` และ `platform.org.get`
+
+- `GET /platform/orgs` query key ได้เฉพาะ `q`, `status`, `cursor`: `q` trim 1–100 ค้นแบบ substring ไม่สนตัวพิมพ์ใน `slug`, `displayName` และ email ของ owner ที่ `active`; `status` ∈ `active`/`suspended`; หน้าละ 50 เรียง `createdAt` ใหม่ → เก่า แล้ว `id`; ตอบ `{ items: PlatformOrgSummary[], nextCursor }` โดย `PlatformOrgSummary = { id, slug, displayName, status, plan: { code, name }, usage: { branches, staff }, createdAt }`
+- `GET /platform/orgs/{orgId}`: id ไม่ใช่ UUID → `VALIDATION_FAILED`; ไม่พบ → `NOT_FOUND`; ตอบ `{ organization: Organization (#contract-org), subscription: { plan: { code, name, maxBranches, maxStaff, priceSatangPerMonth, isActive }, startedAt, currentPeriodEnd, note }, usage: { branches, staff: { active, pendingInvitations, total } }, owners: [{ userId, displayName, email, username }] }`; `owners` = membership owner ที่ active; `email` null สำหรับบัญชี managed
+
+<a id="contract-platform-org-status"></a>
+### `platform.org.setStatus`
+
+- `PUT /platform/orgs/{orgId}/status` · strict body `{ status: 'active' | 'suspended', reason }` · `reason` trim 1–500 บังคับทั้งสองทิศ; ร้านไม่พบ → `NOT_FOUND`
+- ใน tenant transaction ของร้าน (lock แถว organization): สถานะเท่าเดิม → 200 ไม่เขียนอะไร; ไม่เช่นนั้นตั้ง `status`, `updated_at` และ audit `platform.org_status_changed` (`org_id` = ร้านเป้าหมาย — owner เห็นใน #contract-audit-list, actor = admin, `entity_type 'organization'`, `before { status }`, `after { status, reason }`); เหตุผลเก็บใน audit เท่านั้น
+- ไม่แตะ session หรือคำเชิญ; ตอบ 200 = รายละเอียดเดียวกับ `platform.org.get`
+
+<a id="contract-platform-set-plan"></a>
+### `platform.org.setPlan` (human_review)
+
+- `PUT /platform/orgs/{orgId}/subscription` · strict body: `planCode` (1–50, ต้องเป็นแพ็กเกจที่ `is_active` — ไม่พบหรือปิดใช้ → `VALIDATION_FAILED` ที่ `planCode`), `currentPeriodEnd` (ISO instant หรือ null; **ไม่ส่ง = null**; ค่าในอดีตยอมรับและบังคับตามเดิม), `note` (trim 1–500 หรือ null; **ไม่ส่ง = null**); ร้านไม่พบ → `NOT_FOUND`
+- ใน tenant transaction ของร้าน: lock แถว subscription `FOR UPDATE` (แถวเดียวกับ #rule-branch-capacity และ #rule-staff-check-and-lock); ทุกค่าเท่าเดิม → 200 ไม่เขียน; ไม่เช่นนั้นอัปเดต และตั้ง `started_at = now` เฉพาะเมื่อเปลี่ยนแพ็กเกจ
+- ลดแพ็กเกจต่ำกว่าการใช้งานได้: สาขา สมาชิก และคำเชิญที่ค้างคงอยู่; การเพิ่มใหม่ถูกบล็อกด้วย F05
+- audit `platform.plan_changed` เมื่อ `planCode` หรือ `currentPeriodEnd` เปลี่ยน (`org_id` = ร้านเป้าหมาย, `before`/`after` เฉพาะสองฟิลด์นี้ที่เปลี่ยน); **`note` ไม่อยู่ใน audit** และการแก้ `note` อย่างเดียวไม่มีแถว audit
+- ตอบ 200 = รายละเอียดเดียวกับ `platform.org.get`
+
+<a id="contract-platform-plan-list"></a>
+### `platform.plan.list`
+
+- `GET /platform/plans` · platform admin → 200 `{ items: [{ code, name, maxBranches, maxStaff, priceSatangPerMonth, isActive }] }` เรียงตาม `code`; รวมแพ็กเกจที่ปิดใช้ (บอกด้วย `isActive`)
