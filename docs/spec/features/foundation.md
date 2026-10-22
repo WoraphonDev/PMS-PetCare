@@ -321,10 +321,10 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 | <a id="ep-branch.closures"></a><a id="ep-branch.closure.create"></a>`branch.closure.create` | `POST /branches/{branchId}/closures` | `branch.update` | 201 Closure · outbox `branch.hours_changed` · #contract-branch-closures |
 | <a id="ep-branch.closure.delete"></a>`branch.closure.delete` | `DELETE /branches/{branchId}/closures/{closureId}` | `branch.update` | 204 ไม่มี body · outbox `branch.hours_changed` |
 | <a id="ep-branch.closure.list"></a>`branch.closure.list` | `GET /branches/{branchId}/closures` | `org.settings.read` | 200 `{ items: Closure[] }` · ไม่มี event |
-| <a id="ep-staff.list"></a>`staff.list` | `GET /staff` | `staff.read` | membership + คำเชิญที่ค้าง |
-| <a id="ep-staff.invite"></a>`staff.invite` | `POST /staff/invitations` | `staff.invite` | `{ email, role, branchIds }` · F02, F03, F05 · ส่งอีเมล · audit `staff.invited` |
-| <a id="ep-staff.invitation.revoke"></a>`staff.invitation.revoke` | `DELETE /staff/invitations/{invitationId}` | `staff.invite` | |
-| <a id="ep-invitation.accept"></a>`invitation.accept` | `POST /invitations/accept` | user (หรือสมัครใหม่ใน flow เดียวกัน) | `{ token }` · F03 · audit `staff.joined` |
+| <a id="ep-staff.list"></a>`staff.list` | `GET /staff` | `staff.read` | membership + คำเชิญที่ค้าง · #contract-staff-list |
+| <a id="ep-staff.invite"></a>`staff.invite` | `POST /staff/invitations` | `staff.invite` | `{ email, role, branchIds }` · F02, F03, F05 · ส่งอีเมล · audit `staff.invited` · #contract-staff-invite |
+| <a id="ep-staff.invitation.revoke"></a>`staff.invitation.revoke` | `DELETE /staff/invitations/{invitationId}` | `staff.invite` | 204 · #contract-staff-invitation-revoke |
+| <a id="ep-invitation.accept"></a>`invitation.accept` | `POST /invitations/accept` | user ที่ login แล้ว (สมัครใหม่ใน flow เดียวกัน: follow-up #rule-invite-signup-followup) | `{ token }` · F03 · audit `staff.joined` · #contract-invitation-accept |
 | <a id="ep-staff.account.create"></a>`staff.account.create` | `POST /staff/accounts` | `staff.invite` | `{ displayName, username, password, role, branchIds }` · F02, F05, F09 · `CONFLICT` เมื่อ username ซ้ำ · audit `staff.account_created` |
 | <a id="ep-staff.password.reset"></a>`staff.password.reset` | `PUT /staff/{membershipId}/password` | `staff.update` | `{ newPassword }` · F09 · audit `staff.password_reset` |
 | <a id="ep-staff.update"></a>`staff.update` | `PATCH /staff/{membershipId}` | `staff.update` | `{ role?, branchIds?, displayName? }` · F01, F02, ¹ · audit `staff.role_changed` |
@@ -359,7 +359,7 @@ Response DTO ใช้ชื่อ camelCase ของคอลัมน์ใ�
 | <a id="scr-settings-branches"></a>`scr-settings-branches` | `/settings/branches` | owner, manager | รายการสาขา + ปุ่มเพิ่ม (ซ่อนเมื่อถึง limit พร้อมข้อความแพ็กเกจ) |
 | <a id="scr-settings-branch"></a>`scr-settings-branch` | `/settings/branches/:id` | owner, manager | แท็บ: ข้อมูล · เวลาเปิด-ปิด · วันหยุด · การชำระเงิน (owner) |
 | <a id="scr-staff"></a>`scr-staff` | `/settings/staff` | owner, manager, front_desk (อ่าน) | ตารางพนักงาน: ชื่อ, email หรือ username, role, สาขา, สถานะ, 2FA; คำเชิญค้าง; ปุ่ม "เชิญทาง email" และ "สร้างบัญชี (ไม่มี email)"; เมนู "รีเซ็ตรหัสผ่าน" เฉพาะบัญชี managed |
-| <a id="scr-invite-accept"></a>`scr-invite-accept` | `/invite/:token` | public/user | แสดงชื่อร้าน + role; login หรือสมัครแล้วรับคำเชิญ |
+| <a id="scr-invite-accept"></a>`scr-invite-accept` | `/invite#token=<token>` | public/user | token อยู่ใน fragment (#rule-invitation-token) อ่านแล้วล้างออกจาก history แล้ว POST JSON; แสดงชื่อร้าน + role; login แล้วรับคำเชิญ; สมัครแล้วรับคำเชิญ: follow-up #rule-invite-signup-followup |
 | <a id="scr-audit"></a>`scr-audit` | `/settings/audit` | owner | ตาราง audit + ตัวกรอง |
 | <a id="scr-subscription"></a>`scr-subscription` | `/settings/subscription` | owner, manager | แพ็กเกจปัจจุบัน + การใช้งาน vs limit |
 | <a id="scr-platform-orgs"></a>`scr-platform-orgs` | `/platform/orgs` | platform admin | ค้นหาร้าน, สถานะ, แพ็กเกจ; หน้า detail เปลี่ยนแพ็กเกจ/ระงับ |
@@ -630,3 +630,118 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 - กติกา mask: แทนทุกหลักก่อน 4 หลักสุดท้ายด้วย `*` — เบอร์ 10 หลัก `0812345678` → `******5678`; เลข 13 หลัก `1234567890123` → `*********0123`; `null` คงเป็น `null`
 - ห้ามมีค่าเต็มใน audit payload, application log หรือ error message; การ mask ใช้กับ audit เท่านั้น ไม่เปลี่ยนค่าที่เก็บใน `branch` หรือ `Branch` DTO
 - เหตุผล: การเปิดเผยเลขเพื่อรับชำระเงินไม่ได้แปลว่าเก็บสำเนาเต็มใน audit ได้โดยอัตโนมัติ; 4 หลักท้ายพอสำหรับตรวจว่าบัญชีรับเงินถูกเปลี่ยน
+
+
+## 14. Staff list, invitations and invitation accept contract (T-0015, T-0042)
+
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-22** — T-0015-01 (B), T-0015-02 (A), T-0015-03 (A), T-0015-04 (T1 + L1), T-0015-05 (base contract + V1; ไม่เลือก B/C), T-0015-06 (A), T-0015-07 (A) บันทึกในไฟล์ `docs/questions/T-0015-0N.md`; แบ่ง implementation เป็น T-0015 (list / invite / revoke + โครงสร้างร่วม) และ T-0042 (`invitation.accept`). ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น; ห้ามเริ่ม implementation ก่อน merge. ไม่เพิ่ม error code, permission, audit action, outbox event, คอลัมน์ หรือ migration
+
+<a id="rule-staff-check-and-lock"></a>
+### Two-phase check-and-lock (ทุก write ที่เปลี่ยนที่นั่งพนักงาน)
+
+ใช้กับ `staff.invite` (รวม re-invite), `staff.invitation.revoke`, `invitation.accept` และ writer ในอนาคตที่เปลี่ยนที่นั่ง (T-0016 `staff.account.create`, T-0017 `staff.update`/`staff.remove`)
+
+- **Phase 1 — ก่อน tenant lock ใด ๆ, ไม่เขียนข้อมูล:** guard เดิม (session, 2FA session, `PASSWORD_CHANGE_REQUIRED`; route ที่อยู่ในร้านมี `X-Org-Id`, membership, `ORG_SUSPENDED`, permission ตามลำดับ guard เดิม), validation ของ request, กติกาที่ดูจาก request อย่างเดียว; `invitation.accept` เพิ่ม parse token, ตรวจ managed / verified email และ tenant preflight (#contract-invitation-accept)
+- **Phase 2 — transaction เดียวของ tenant** (สำหรับ accept คือ transaction เดียวกับ preflight): ล็อกตามลำดับนี้เสมอ ขั้นที่ไม่ใช้ให้ข้าม ห้ามสลับลำดับ
+  1. แถว `subscription` ของ org `FOR UPDATE` (แถวเดียวกับ #rule-branch-capacity) — ไม่มีแถว → `INTERNAL` (fail closed)
+  2. แถว `invitation` ที่เกี่ยวข้อง `FOR UPDATE` เรียงตาม id
+  3. แถว `membership` ของ (org, user) `FOR UPDATE` เมื่อมีอยู่
+- หลังได้ lock และก่อนเขียน ตรวจสถานะที่ operation ต้องใช้ใหม่ทั้งหมด (รวมสิ่งที่ phase 1 อ่านไว้แล้ว) — check แรกที่ไม่ผ่านเป็นคำตอบ; ล้มใน phase 2 → rollback ทั้งหมด ไม่มี write, audit หรือ email
+- ลำดับ error ของแต่ละ endpoint อยู่ใน contract ของ endpoint นั้น
+
+<a id="rule-staff-capacity"></a>
+### F05 สำหรับพนักงาน (`max_staff`)
+
+- จำนวน = `membership` ที่ `status = 'active'` ทุก role (**รวม owner** และบัญชี managed) + `invitation` ที่ `accepted_at` null, `revoked_at` null และ `expires_at > now` — นับใน **SQL statement เดียว** ขณะถือ lock ข้อ 1
+- re-invite ที่แทนคำเชิญเดิมของ email เดียวกัน ไม่นับใบเดิม
+- จำนวน ≥ `max_staff` → `PLAN_LIMIT_REACHED` (402); `max_staff` null = ไม่จำกัด; plan inactive/หมดอายุยังบังคับ (เหมือน #rule-branch-capacity)
+- `invitation.accept` **ไม่ตรวจ limit ซ้ำ** (ที่นั่งถูกจองตอนเชิญแล้ว) แต่ยังถือ lock ข้อ 1 เพื่อ serialize การเปลี่ยน "คำเชิญค้าง → สมาชิก active" กับการนับของ invite และการยกเลิกของ re-invite; การลดแพ็กเกจภายหลังไม่ยกเลิกคำเชิญที่ค้างและไม่บล็อก accept
+
+<a id="rule-invitation-token"></a>
+### Token, ลิงก์ และอีเมลคำเชิญ
+
+- token = `<orgId>.<32 random bytes base64url>`; `token_hash` = SHA-256 (hex) ของ token ทั้งชุด; token ไม่ถูกเก็บ, ไม่ส่งใน response, ไม่อยู่ใน audit หรือ application log
+- ลิงก์ในอีเมล: `${APP_ORIGIN}/invite#token=<token>` (fragment — ไม่อยู่ใน request path และไม่ไปกับ `Referer`); API รับ token ใน JSON body ของ `invitation.accept` เท่านั้น ไม่รับทาง path/query
+- ส่งอีเมลหลัง commit ผ่าน `EmailSender` (ทำงานเบื้องหลัง); ส่งล้มเหลวไม่เปลี่ยน response และไม่ rollback; log เก็บเฉพาะ error category ไม่มี token, ที่อยู่อีเมล หรือลิงก์
+- หัวเรื่อง: `คำเชิญเข้าร่วมร้าน <displayName ของร้าน>`
+- เนื้อหา: `คุณได้รับคำเชิญให้เข้าร่วมร้าน <displayName> ในตำแหน่ง <label ของ role ตาม #roles>` · `เปิดลิงก์นี้เพื่อรับคำเชิญ (ใช้ได้ครั้งเดียวและหมดอายุใน 7 วัน):` · ลิงก์ · `ถ้าคุณไม่ได้คาดว่าจะได้รับคำเชิญนี้ ไม่ต้องทำอะไร`
+- การทดสอบ log ของแอปพิสูจน์ได้แค่ว่าโปรเซสของเราไม่ log token — ไม่ได้รับประกันว่า proxy, ผู้ให้บริการอีเมล หรือ browser จะไม่เผย token
+
+<a id="contract-staff-list"></a>
+### `staff.list`
+
+- `GET /staff` · `staff.read` → 200 `{ members: StaffMember[], invitations: PendingInvitation[] }` ไม่มี pagination; query string ไม่มีกติกาเพิ่ม (เหมือน `branch.list`)
+- `StaffMember = { membershipId, userId, displayName, email, username, role, branchIds, status, isManaged, twoFactorEnabled, createdAt }` เฉพาะ `status = 'active'`; `email` = null สำหรับบัญชี managed (ห้ามแสดง `@managed.invalid`); `username` = null เมื่อไม่มี
+- `PendingInvitation = { id, email, role, branchIds, expiresAt, invitedByUserId, createdAt }` เฉพาะ `accepted_at` null, `revoked_at` null และ `expires_at > now`
+- เรียง: members ตาม role (owner → manager → front_desk → groomer → caretaker) แล้ว `displayName` แล้ว `membershipId`; invitations ตาม `createdAt` ใหม่ → เก่า แล้ว `id`
+- owner / manager เห็นทุกแถวและทุก `branchIds`
+- `front_desk` (F02 — ไม่มีข้อยกเว้น):
+  - เห็นสมาชิก role ระดับสาขาที่ `branchIds` ทับกับสาขาของตัวเองอย่างน้อย 1 สาขา และเห็น owner / manager ที่ active ทุกคน (role ทั้ง org แสดง `branchIds: []`)
+  - `branchIds` ของทุกแถวแสดงเฉพาะสาขาที่ตัวเองมี (intersection) ไม่เปิดเผยสาขาอื่น
+  - เห็นคำเชิญ role ระดับสาขาที่ `branchIds` ทับกับสาขาของตัวเอง (`branchIds` ตัดแบบเดียวกัน); ไม่เห็นคำเชิญ owner / manager
+  - คอลัมน์เหมือนกับ owner / manager (`email`, `username`, `twoFactorEnabled`) — F02 จำกัดแถวและสาขา ไม่จำกัดคอลัมน์
+- `groomer` / `caretaker` → `FORBIDDEN` (ไม่มี `staff.read`)
+
+<a id="contract-staff-invite"></a>
+### `staff.invite` และ re-invite
+
+- `POST /staff/invitations` · `staff.invite` · strict body ตาม §11 `{ email, role, branchIds }`
+  - `email`: trim, แปลงเป็นตัวพิมพ์เล็ก, รูปแบบ email, 1–254 ตัวอักษร, ห้ามลงท้าย `@managed.invalid`
+  - `role`: `staff_role`
+  - `branchIds`: array ของ UUID ไม่ซ้ำ; role ระดับสาขาต้องมี ≥ 1; owner / manager ต้องส่ง `[]`; สาขา `is_active = false` ใช้ได้
+- ลำดับ error (check แรกที่ไม่ผ่านเป็นคำตอบ):
+  1. guard เดิม (`UNAUTHENTICATED`, `X-Org-Id`, `PASSWORD_CHANGE_REQUIRED`, `ORG_SUSPENDED`, `FORBIDDEN` permission)
+  2. body ผิด (รวม UUID ผิดรูปแบบ, id ซ้ำ, owner/manager ส่ง branch) → `VALIDATION_FAILED` + `details.fields.<key>`
+  3. manager ขอ role `owner` / `manager` → `FORBIDDEN` (¹)
+  4. role ระดับสาขาแต่ `branchIds` ว่าง → `BRANCH_REQUIRED`
+  5. phase 2: lock subscription (ไม่มี → `INTERNAL`) → lock คำเชิญค้างของ email นี้
+  6. UUID ถูกรูปแบบแต่ไม่พบเป็นสาขาใน tenant ปัจจุบัน (ไม่มีจริงหรือเป็นของ org อื่น — ไม่ค้นข้าม tenant เพื่อแยก) → `NOT_FOUND` (F07)
+  7. ผู้เรียกเป็น manager และคำเชิญค้างที่ล็อกไว้ใบใดเป็น `owner` / `manager` → `FORBIDDEN` (¹ — re-invite จะยกเลิกใบนั้น) ใบเดิมไม่เปลี่ยน ไม่มีใบใหม่ ไม่มี audit ไม่มีอีเมล
+  8. หา user จาก email (ผ่าน public API ของ module `identity` บน transaction เดียวกัน ไม่ล็อกแถว user) แล้ว lock membership ของ user เหล่านั้นใน org นี้: มี `active` → `ALREADY_MEMBER`; ไม่มี user, ไม่มี membership หรือมีแค่ `removed` → ผ่าน
+  9. #rule-staff-capacity → `PLAN_LIMIT_REACHED`
+- เขียน: คำเชิญค้างเดิมของ email นี้ได้ `revoked_at = now`, `updated_at = now` (F03 — ไม่มี audit แยก); insert คำเชิญใหม่ `expires_at = now + 7 วัน`; audit `staff.invited` (`entity_type 'invitation'`, `entity_id` = id ใหม่, `before` null, `after { email, role, branchIds, expiresAt }`) ใน transaction เดียวกัน; ส่งอีเมลตาม #rule-invitation-token หลัง commit
+- ตอบ **201** `Invitation = { id, email, role, branchIds, expiresAt, invitedByUserId, createdAt }` (ไม่มี token / hash)
+- ข้อจำกัด: user ที่สมัครหรือเปลี่ยน email หลังขั้น 8 จะไม่ถูกเห็น — สถานะสมาชิกตัดสินจริงตอน accept
+
+<a id="contract-staff-invitation-revoke"></a>
+### `staff.invitation.revoke`
+
+- `DELETE /staff/invitations/{invitationId}` · `staff.invite` · body / query ตามกติกา DELETE ของ #contract-branch-schedule-common · ตอบ **204** ไม่มี body
+- ลำดับ error: guard เดิม → `invitationId` ไม่ใช่ UUID → `VALIDATION_FAILED` → phase 2: lock subscription (ไม่มี → `INTERNAL`) → lock คำเชิญ → ไม่พบ, เป็นของ org อื่น, ใช้แล้ว, ยกเลิกแล้ว หรือหมดอายุ → `NOT_FOUND` → ผู้เรียกเป็น manager และคำเชิญเป็น `owner` / `manager` → `FORBIDDEN`
+- เขียน `revoked_at = now`, `updated_at = now`; **ไม่มี audit** (§6 ไม่มี action นี้ — การเพิ่มต้องเป็น amendment แยก)
+- แข่งกับ accept: ใครได้ lock ก่อนชนะ — revoke ชนะ → accept ได้ `INVITATION_INVALID` ไม่มี membership; accept ชนะ → revoke ได้ `NOT_FOUND` membership คงอยู่
+
+<a id="contract-invitation-accept"></a>
+### `invitation.accept` (เฉพาะผู้ที่มีบัญชีและ login แล้ว)
+
+- `POST /invitations/accept` · user ที่ login แล้ว (ไม่ต้องมี `X-Org-Id`) · strict body `{ token }` (string 1–200 ตัวอักษร) · ผู้ที่ยังไม่มีบัญชีดู #rule-invite-signup-followup
+- ลำดับการตรวจ (check แรกที่ไม่ผ่านเป็นคำตอบ):
+  - Phase 1 (ไม่ล็อก ไม่เขียน):
+    1. guard เดิม → `UNAUTHENTICATED` (ไม่มี session / ยังไม่ผ่าน 2FA) หรือ `PASSWORD_CHANGE_REQUIRED`
+    2. body ผิด → `VALIDATION_FAILED`
+    3. token ผิดรูปแบบ → `INVITATION_INVALID`
+    4. user เป็นบัญชี managed → `INVITATION_INVALID` (F09)
+    5. `emailVerified = false` → `UNAUTHENTICATED` — ตรวจที่ use case เพราะ guard ไม่ตรวจ ตามความหมายของ #rule-email-login-policy (บัญชี real-email ที่ยังไม่ verify ไม่มี session ที่ใช้ได้)
+    6. tenant preflight ใน `withTenant(orgId จาก token)` อ่านคำเชิญด้วย hash แบบไม่ล็อก: ไม่พบ (รวม org ที่ไม่มีจริง), ใช้แล้ว, ยกเลิกแล้ว, หมดอายุ (`expires_at <= now`) หรือ email ไม่ตรงกับ email ของ user (ไม่สนตัวพิมพ์) → `INVITATION_INVALID`
+    7. org `suspended` → `ORG_SUSPENDED`
+  - Phase 2 (transaction เดียวกับ preflight):
+    8. lock subscription — ไม่มีแถว → `INTERNAL` (ถึงขั้นนี้ได้เฉพาะเมื่อ org และคำเชิญมีจริง จึงเป็นข้อมูลผิดปกติ ห้ามแปลงเป็น `INVITATION_INVALID`)
+    9. lock คำเชิญแล้วตรวจเงื่อนไขข้อ 6 ซ้ำ → `INVITATION_INVALID`
+    10. อ่าน `organization.status` ซ้ำ → `ORG_SUSPENDED`
+    11. lock membership ของ (org, user): `active` → `ALREADY_MEMBER` (409) คำเชิญไม่ถูกใช้
+    12. เขียน
+- ข้อ 3–5 และข้อ 7 ไม่รอ tenant lock ใด ๆ
+- เขียน (transaction เดียว):
+  - ไม่มี membership → insert membership (`role` จากคำเชิญ, `display_name = user.name`, `status 'active'`) + `membership_branch` ตาม `branchIds`
+  - มี membership `removed` → เปิดใช้แถวเดิม: `status = 'active'`, `role` และ `membership_branch` แทนด้วยค่าจากคำเชิญ, `display_name` เดิม, `updated_at = now`
+  - คำเชิญ `accepted_at = now`, `updated_at = now`
+  - audit `staff.joined`: actor = user, `entity_type 'membership'`, `entity_id` = membership id, `before` null (หรือ `{ status: 'removed' }` เมื่อกลับเข้าร่วม), `after { role, branchIds, invitationId }`
+  - ไม่ตรวจ `max_staff` (#rule-staff-capacity); ไม่มี outbox
+- ตอบ **200** `{ orgId, membershipId, role, branchIds }`
+
+<a id="rule-invite-signup-followup"></a>
+### ผู้รับเชิญที่ยังไม่มีบัญชี (follow-up)
+
+- ข้อความ "หรือสมัครใหม่ใน flow เดียวกัน" ใน #ep-invitation.accept และ "สมัครแล้วรับคำเชิญ" ใน #scr-invite-accept ยัง **ไม่มีผล** จนกว่าจะมี spec amendment สำหรับการสมัครที่ผูกกับ token คำเชิญ (สร้างเฉพาะ user ไม่สร้างร้าน) และการ์ดที่มนุษย์ออกเลขให้
+- ห้ามใช้ `auth.signup` (สร้างร้านใหม่เสมอ) เป็นทางแก้ชั่วคราว
+- T-0026 ส่ง flow สำหรับผู้ที่ login แล้วได้ก่อน; flow ผู้ที่ยังไม่มีบัญชีขึ้นกับ follow-up นี้

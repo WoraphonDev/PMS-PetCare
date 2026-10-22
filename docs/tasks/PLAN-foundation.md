@@ -40,7 +40,9 @@ T-0008 กับ T-0009 ทำขนานกันได้
 | [T-0040](T-0040.md) | DELETE bodies without Content-Type reach the route (T-0013-01); depends T-0013 | |
 | [T-0041](T-0041.md) | test DB teardown waits for pool clients to close (CI `57P01` unhandled-error flake); test only | |
 | [T-0014](T-0014.md) | `branch.paymentSettings.update` (F08) — spec §13; T-0014-01…04 answered (02: check-digit formula is a human-approved PMS policy); human merge of card + §13 before implementation | ✓ |
-| T-0015 | `staff.list`, `staff.invite`, `staff.invitation.revoke`, `invitation.accept` (F03) | |
+| [T-0015](T-0015.md) | `staff.list` (F02 branch-scoped), `staff.invite` + re-invite, `staff.invitation.revoke` (F03, F05) + shared pieces (seat count/locks, token, email, identity read API) — spec §14; T-0015-01…07 answered; human merge of card + §14 before implementation | |
+| [T-0042](T-0042.md) | `invitation.accept` for logged-in users with a verified email (§14 #contract-invitation-accept) + all accept races; depends T-0015 | |
+| *(unnumbered — follow-up of T-0015-06; number given by the human)* | invite-bound signup: user-only signup tied to an invitation token, no new shop (#rule-invite-signup-followup); needs a spec amendment first — never `auth.signup` as a workaround | |
 | T-0016 | `staff.account.create`, `staff.password.reset` (F09) | |
 | T-0017 | `staff.update`, `staff.remove` (F01, F02) | |
 | T-0018 | `audit.list`, `subscription.get` | |
@@ -56,7 +58,7 @@ T-0008 กับ T-0009 ทำขนานกันได้
 | T-0023 | auth screens + `/verify-email` fragment → clear history → POST JSON; resend/recovery/invalid/expired/replaced; 201 ไม่อ้าง confirmed delivery; depends T-0022, T-0011, T-0035, T-0036; release gate signup |
 | T-0024 | app shell: org/branch switcher, nav ตามสิทธิ์, แถบร้านถูกระงับ |
 | T-0025 | settings: org, branches, branch (ข้อมูล/เวลา/วันหยุด/การชำระเงิน) |
-| T-0026 | staff: list, invite, create account, reset password, edit/remove, invite accept |
+| T-0026 | staff: list, invite, create account, reset password, edit/remove, invite accept · `scr-invite-accept` reads the token from the fragment `/invite#token=` (§14); logged-in accept depends T-0015, T-0042; invitees **without** an account depend on the invite-bound signup follow-up |
 | T-0027 | audit, subscription, account security |
 | T-0028 | platform admin screens |
 | T-0029 | Playwright E2E: signup → verify email → login owner → เชิญพนักงาน → login พนักงาน → ตั้งค่าสาขา |
