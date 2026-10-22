@@ -255,12 +255,20 @@ describe("rejections change nothing", () => {
       [null, "_"],
     ];
     for (const [body, field] of cases) {
-      const res = await app.inject({ method: "PUT", url: `/api/v1/branches/${id}/hours`, headers: { ...s.headers, "content-type": "application/json" }, payload: JSON.stringify(body) });
+      const res = await app.inject({
+        method: "PUT",
+        url: `/api/v1/branches/${id}/hours`,
+        headers: { ...s.headers, "content-type": "application/json" },
+        payload: JSON.stringify(body),
+      });
       const error = await expectError(res, 400, "VALIDATION_FAILED");
       expect(Object.keys((error.details as { fields: object }).fields), JSON.stringify(body)).toContain(field);
     }
     await expectUnknownKeysRejected((body) => put(s.headers, id, body), { items: week });
-    await expectUnknownKeysRejected((body) => put(s.headers, id, { items: week.map((d, i) => (i === 2 ? { ...d, ...body } : d)) }).then(nestedAsRoot), {});
+    await expectUnknownKeysRejected(
+      (body) => put(s.headers, id, { items: week.map((d, i) => (i === 2 ? { ...d, ...body } : d)) }).then(nestedAsRoot),
+      {},
+    );
     await expectUnchanged(s, branchBefore, hoursBefore);
   });
 
@@ -299,5 +307,9 @@ function nestedAsRoot(res: Awaited<ReturnType<typeof call>>) {
   if (!fields) return res;
   const rekeyed: Record<string, unknown> = Object.create(null);
   for (const [k, v] of Object.entries(fields)) rekeyed[k.replace(/^items\.2\./, "")] = v;
-  return { ...res, statusCode: res.statusCode, json: () => ({ ...body, error: { ...body.error, details: { fields: rekeyed } } }) } as typeof res;
+  return {
+    ...res,
+    statusCode: res.statusCode,
+    json: () => ({ ...body, error: { ...body.error, details: { fields: rekeyed } } }),
+  } as typeof res;
 }

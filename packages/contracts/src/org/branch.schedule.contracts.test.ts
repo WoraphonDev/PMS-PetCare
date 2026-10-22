@@ -61,7 +61,21 @@ describe("BranchHoursPutRequest", () => {
     expect(BranchHoursPutRequest.safeParse(withItem(0, day(1, "00:00", "00:01"))).success).toBe(true);
     expect(BranchHoursPutRequest.safeParse(withItem(0, day(1, "23:58", "23:59"))).success).toBe(true);
     expect(BranchHoursPutRequest.safeParse(withItem(0, day(1, "09:59", "10:00"))).success).toBe(true);
-    for (const bad of ["24:00", "9:00", "09:0", "09:00:00", "09:00:00.5", "09:00Z", "09:00+07:00", " 09:00", "09:00 ", "09:60", "0９:00", "", 900]) {
+    for (const bad of [
+      "24:00",
+      "9:00",
+      "09:0",
+      "09:00:00",
+      "09:00:00.5",
+      "09:00Z",
+      "09:00+07:00",
+      " 09:00",
+      "09:00 ",
+      "09:60",
+      "0９:00",
+      "",
+      900,
+    ]) {
       expect(fieldsOf(BranchHoursPutRequest.safeParse(withItem(0, day(1, bad as string, "23:59")))), String(bad)).toContain(
         "items.0.opensAt",
       );
@@ -138,9 +152,7 @@ describe("BranchClosureCreateRequest", () => {
       reason: null,
     });
     expect(BranchClosureCreateRequest.parse({ startDate: "2026-12-30", endDate: "2027-01-02", reason: null }).reason).toBeNull();
-    expect(BranchClosureCreateRequest.parse({ startDate: "2026-12-30", endDate: "2027-01-02", reason: "  ปีใหม่ \n" }).reason).toBe(
-      "ปีใหม่",
-    );
+    expect(BranchClosureCreateRequest.parse({ startDate: "2026-12-30", endDate: "2027-01-02", reason: "  ปีใหม่ \n" }).reason).toBe("ปีใหม่");
   });
 
   it("reports a reversed range on endDate", () => {

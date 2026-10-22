@@ -115,7 +115,14 @@ export async function closuresOf(infra: TestInfra, orgId: string) {
   );
   return rows as Array<{ id: string; branch_id: string; start_date: string; end_date: string; reason: string | null }>;
 }
-export async function insertClosureRow(infra: TestInfra, orgId: string, branchId: string, startDate: string, endDate: string, reason: string | null = null) {
+export async function insertClosureRow(
+  infra: TestInfra,
+  orgId: string,
+  branchId: string,
+  startDate: string,
+  endDate: string,
+  reason: string | null = null,
+) {
   const { rows } = await infra.platformDb.$client.query<{ id: string }>(
     "insert into branch_closure (org_id, branch_id, start_date, end_date, reason) values ($1, $2, $3, $4, $5) returning id",
     [orgId, branchId, startDate, endDate, reason],
@@ -124,7 +131,13 @@ export async function insertClosureRow(infra: TestInfra, orgId: string, branchId
 }
 
 /** Every schedule route: guard errors, platform flag without membership, and rejection of any query key (incl. repeated keys). */
-export async function expectScheduleRouteErrors(app: NestFastifyApplication, infra: TestInfra, method: Method, path: (s: Seeded) => string, payload?: unknown) {
+export async function expectScheduleRouteErrors(
+  app: NestFastifyApplication,
+  infra: TestInfra,
+  method: Method,
+  path: (s: Seeded) => string,
+  payload?: unknown,
+) {
   await expectGuardErrors(app, infra, method, path({ branchIds: [randomUUID(), randomUUID()] } as Seeded), payload);
   const admin = await seedOrg(app, infra, { role: "owner", branches: ["Admin"] });
   const target = await seedOrg(app, infra, { role: "owner", branches: ["A", "B"] });
@@ -145,9 +158,20 @@ export async function expectScheduleRouteErrors(app: NestFastifyApplication, inf
 }
 
 /** GET/DELETE take no body: nonempty → VALIDATION_FAILED at `_`; absent or zero-byte bodies are accepted (status `ok`). */
-export async function expectNoBodyRule(app: NestFastifyApplication, method: "GET" | "DELETE", url: () => Promise<string>, headers: Record<string, string>, ok: number) {
+export async function expectNoBodyRule(
+  app: NestFastifyApplication,
+  method: "GET" | "DELETE",
+  url: () => Promise<string>,
+  headers: Record<string, string>,
+  ok: number,
+) {
   for (const payload of [{}, { x: 1 }, "x"]) {
-    const res = await app.inject({ method, url: `/api/v1${await url()}`, headers: { ...headers, "content-type": typeof payload === "string" ? "text/plain" : "application/json" }, payload: typeof payload === "string" ? payload : JSON.stringify(payload) });
+    const res = await app.inject({
+      method,
+      url: `/api/v1${await url()}`,
+      headers: { ...headers, "content-type": typeof payload === "string" ? "text/plain" : "application/json" },
+      payload: typeof payload === "string" ? payload : JSON.stringify(payload),
+    });
     const error = await expectError(res, 400, "VALIDATION_FAILED");
     expect(error.details, JSON.stringify(payload)).toMatchObject({ fields: { _: expect.any(Array) } });
   }

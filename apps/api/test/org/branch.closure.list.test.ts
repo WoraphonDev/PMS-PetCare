@@ -155,7 +155,9 @@ describe("branch.closure.list", () => {
       "select r.rolsuper, r.rolbypassrls, (select count(*) from pg_tables t where t.tablename = 'branch_closure' and t.tableowner = current_user)::int as owns from pg_roles r where r.rolname = current_user",
     );
     expect(role.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false, owns: 0 });
-    const noContext = await infra.runtimeDb.$client.query("select count(*)::int as n from branch_closure").catch(() => ({ rows: [{ n: 0 }] }));
+    const noContext = await infra.runtimeDb.$client
+      .query("select count(*)::int as n from branch_closure")
+      .catch(() => ({ rows: [{ n: 0 }] }));
     expect(noContext.rows[0]).toEqual({ n: 0 });
     const foreign = await withTenant(infra.runtimeDb, other.orgId, (tx) => tx.query.branchClosure.findMany());
     expect(foreign).toEqual([]);

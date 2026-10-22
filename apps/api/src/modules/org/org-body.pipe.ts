@@ -20,3 +20,14 @@ export class OrgBody<S extends z.ZodType> implements PipeTransform<unknown, z.in
     throw new AppError("VALIDATION_FAILED", "Invalid request", { fields });
   }
 }
+
+/**
+ * GET/DELETE schedule routes take no body (#contract-branch-schedule-common): absent or zero-byte only. Checked on the
+ * headers because Fastify never parses a GET body.
+ */
+export function assertNoBody(headers: Record<string, string | string[] | undefined>): void {
+  const length = headers["content-length"];
+  if (headers["transfer-encoding"] !== undefined || (length !== undefined && length !== "0")) {
+    throw new AppError("VALIDATION_FAILED", "Invalid request", { fields: { _: ["Request body is not allowed"] } });
+  }
+}

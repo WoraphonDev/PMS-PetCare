@@ -139,7 +139,9 @@ describe("owner/manager create a closure", () => {
     }
     const rows = await closuresOf(infra, s.orgId);
     expect(rows).toHaveLength(ranges.length);
-    expect(rows.map((r) => [r.start_date, r.end_date])).toEqual([...ranges].sort((a, b) => (a.join() < b.join() ? -1 : a.join() > b.join() ? 1 : 0)));
+    expect(rows.map((r) => [r.start_date, r.end_date])).toEqual(
+      [...ranges].sort((a, b) => (a.join() < b.join() ? -1 : a.join() > b.join() ? 1 : 0)),
+    );
     expect((await branchRow(infra, s.branchIds[0]!)).version).toBe(ranges.length + 1);
     expect((await outboxOf(infra, s.orgId)).map((e) => e.aggregateVersion)).toEqual(ranges.map((_, i) => i + 2));
   });
@@ -150,7 +152,9 @@ describe("owner/manager create a closure", () => {
     const res = await create(s.headers, s.branchIds[0]!, { startDate: "2026-01-01", endDate: "2026-01-01", reason: ` ${reason}\n` });
     expect(res.statusCode).toBe(201);
     expect(res.json().reason).toBe(reason);
-    const { rows } = await infra.platformDb.$client.query("select char_length(reason) as n from branch_closure where org_id = $1", [s.orgId]);
+    const { rows } = await infra.platformDb.$client.query("select char_length(reason) as n from branch_closure where org_id = $1", [
+      s.orgId,
+    ]);
     expect(rows[0].n).toBe(500);
   });
 
@@ -203,7 +207,11 @@ describe("rejections write nothing", () => {
     for (const id of [other.branchIds[0]!, randomUUID()]) {
       await expectError(await create(s.headers, id, { startDate: "2026-01-01", endDate: "2026-01-01" }), 404, "NOT_FOUND");
     }
-    const error = await expectError(await create(s.headers, "nope", { startDate: "2026-01-01", endDate: "2026-01-01" }), 400, "VALIDATION_FAILED");
+    const error = await expectError(
+      await create(s.headers, "nope", { startDate: "2026-01-01", endDate: "2026-01-01" }),
+      400,
+      "VALIDATION_FAILED",
+    );
     expect(error.details).toMatchObject({ fields: { branchId: expect.any(Array) } });
     await expectNothingWritten(s, branchBefore);
     expect(await closuresOf(infra, other.orgId)).toEqual([]);
@@ -246,7 +254,12 @@ describe("rejections write nothing", () => {
       [null, "_"],
     ];
     for (const [body, field] of cases) {
-      const res = await app.inject({ method: "POST", url: `/api/v1/branches/${id}/closures`, headers: { ...s.headers, "content-type": "application/json" }, payload: JSON.stringify(body) });
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/branches/${id}/closures`,
+        headers: { ...s.headers, "content-type": "application/json" },
+        payload: JSON.stringify(body),
+      });
       const error = await expectError(res, 400, "VALIDATION_FAILED");
       expect(Object.keys((error.details as { fields: object }).fields), JSON.stringify(body)).toContain(field);
     }
@@ -275,7 +288,11 @@ describe("rejections write nothing", () => {
     const branchBefore = await branchRow(infra, s.branchIds[0]!);
     failOutbox.on = true;
     try {
-      const error = await expectError(await create(s.headers, s.branchIds[0]!, { startDate: "2026-01-01", endDate: "2026-01-01" }), 500, "INTERNAL");
+      const error = await expectError(
+        await create(s.headers, s.branchIds[0]!, { startDate: "2026-01-01", endDate: "2026-01-01" }),
+        500,
+        "INTERNAL",
+      );
       expect(error).toStrictEqual({ code: "INTERNAL", message: "Unexpected error" });
     } finally {
       failOutbox.on = false;
@@ -284,6 +301,9 @@ describe("rejections write nothing", () => {
   });
 
   it("applies the common schedule route errors", async () => {
-    await expectScheduleRouteErrors(app, infra, "POST", (s) => `/branches/${s.branchIds[0]}/closures`, { startDate: "2026-01-01", endDate: "2026-01-01" });
+    await expectScheduleRouteErrors(app, infra, "POST", (s) => `/branches/${s.branchIds[0]}/closures`, {
+      startDate: "2026-01-01",
+      endDate: "2026-01-01",
+    });
   });
 });

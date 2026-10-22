@@ -36,3 +36,20 @@ export async function recordBranchChange(
     payload: changed ? { ...dto, changedFields: changed } : dto,
   });
 }
+
+/**
+ * #rule-branch-schedule-outbox: one `branch.hours_changed` per effective hours/closure write with the exact minimal
+ * payload `{ branchId, version }` (an invalidation signal, not a snapshot). No audit (#rule-branch-schedule-audit).
+ */
+export async function recordScheduleChange(tx: Tx, ctx: OrgRequestContext, branchId: string, version: number): Promise<void> {
+  await appendOutbox(tx, {
+    orgId: ctx.org.id,
+    branchId,
+    type: "branch.hours_changed",
+    aggregateType: "branch",
+    aggregateId: branchId,
+    aggregateVersion: version,
+    payload: { branchId, version },
+    occurredAt: ctx.now,
+  });
+}
