@@ -176,6 +176,15 @@ export async function expectNoBodyRule(
     const error = await expectError(res, 400, "VALIDATION_FAILED");
     expect(error.details, JSON.stringify(payload)).toMatchObject({ fields: { _: expect.any(Array) } });
   }
+  // A chunked JSON string `""` is two bytes, even though Fastify parses it to an empty string.
+  const jsonEmptyString = await app.inject({
+    method,
+    url: `/api/v1${await url()}`,
+    headers: { ...headers, "content-type": "application/json", "transfer-encoding": "chunked" },
+    payload: Readable.from(['""']),
+  });
+  const jsonError = await expectError(jsonEmptyString, 400, "VALIDATION_FAILED");
+  expect(jsonError.details, 'chunked JSON ""').toMatchObject({ fields: { _: expect.any(Array) } });
   expect((await app.inject({ method, url: `/api/v1${await url()}`, headers, payload: "" })).statusCode).toBe(ok);
   expect((await app.inject({ method, url: `/api/v1${await url()}`, headers: { ...headers, "content-length": "0" } })).statusCode).toBe(ok);
   // Chunked transfer: a body is decided by the bytes received, not by the transfer-encoding header. Without a

@@ -41,8 +41,13 @@ export async function assertNoBody(req: NoBodyRequest): Promise<void> {
 async function hasBody({ headers, body, raw }: NoBodyRequest): Promise<boolean> {
   const length = headers["content-length"];
   if (headers["transfer-encoding"] === undefined) return length !== undefined && length !== "0";
-  if (body !== undefined) return body !== "";
+  // Only the text/plain parser maps zero bytes to ""; any parsed JSON value (even `""`) came from a nonempty body.
+  if (body !== undefined) return !(body === "" && isTextPlain(headers["content-type"]));
   return hasFirstByte(raw);
+}
+
+function isTextPlain(contentType: string | string[] | undefined): boolean {
+  return typeof contentType === "string" && contentType.split(";")[0]?.trim().toLowerCase() === "text/plain";
 }
 
 /** Resolves on the first nonempty chunk (pausing the stream, never destroying it) or on the end of an empty stream. */
