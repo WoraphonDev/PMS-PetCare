@@ -12,6 +12,7 @@ import {
   type BranchHoursPutResponse,
   BranchIdParam,
   type BranchListResponse,
+  BranchPaymentSettingsUpdateRequest,
   BranchScheduleParams,
   BranchUpdateRequest,
   type Closure,
@@ -29,6 +30,7 @@ import { branchClosureList } from "./use-cases/branch.closure.list";
 import { branchCreate } from "./use-cases/branch.create";
 import { branchHoursPut } from "./use-cases/branch.hours.put";
 import { branchList } from "./use-cases/branch.list";
+import { branchPaymentSettingsUpdate } from "./use-cases/branch.payment_settings.update";
 import { branchUpdate } from "./use-cases/branch.update";
 import { orgGet } from "./use-cases/org.get";
 import { orgUpdate } from "./use-cases/org.update";
@@ -78,6 +80,16 @@ export class OrgController {
     @Body(new OrgBody(BranchUpdateRequest)) body: BranchUpdateRequest,
   ): Promise<Branch> {
     return branchUpdate(req.ctx, branchId.toLowerCase(), body);
+  }
+
+  @Put("branches/:branchId/payment-settings")
+  @RequirePermission("branch.payment_settings.update")
+  updatePaymentSettings(
+    @Req() req: Request,
+    @Param("branchId", new OrgBody(BranchIdParam)) branchId: string,
+    @Body(new OrgBody(BranchPaymentSettingsUpdateRequest)) body: BranchPaymentSettingsUpdateRequest,
+  ): Promise<Branch> {
+    return branchPaymentSettingsUpdate(req.ctx, branchId.toLowerCase(), body);
   }
 
   @Put("branches/:branchId/hours")

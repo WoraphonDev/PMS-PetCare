@@ -53,3 +53,8 @@ export async function recordScheduleChange(tx: Tx, ctx: OrgRequestContext, branc
     occurredAt: ctx.now,
   });
 }
+
+/** #rule-branch-payment-settings-audit: every digit before the last 4 becomes `*`; null stays null. Audit only. */
+export function maskPromptpayId(value: string | null): string | null {
+  return value === null ? null : "*".repeat(Math.max(value.length - 4, 0)) + value.slice(-4);
+}

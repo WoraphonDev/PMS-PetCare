@@ -108,6 +108,15 @@ export async function updateBranch(tx: Tx, branchId: string, f: BranchFields, no
   return { ...row, version: rows[0].version };
 }
 
+/** #rule-branch-payment-settings-write: value + version + updated_at in one statement; no other column changes. */
+export async function updateBranchPromptpay(tx: Tx, branchId: string, promptpayId: string | null, now: Date): Promise<BranchRow> {
+  const { rows } = await transactionQuery(tx)<{ version: number }>`
+    UPDATE branch SET promptpay_id = ${promptpayId}, version = version + 1, updated_at = ${now} WHERE id = ${branchId} RETURNING version`;
+  const row = await tx.query.branch.findFirst({ where: (b, { eq }) => eq(b.id, branchId) });
+  if (!row || !rows[0]) throw new Error("updateBranchPromptpay: the locked branch vanished inside its own transaction");
+  return { ...row, version: rows[0].version };
+}
+
 /** Postgres unique violation on `constraint`; drizzle wraps the pg error in `cause`. */
 export function isUniqueViolation(error: unknown, constraint: string): boolean {
   let e = error as { code?: unknown; constraint?: unknown; cause?: unknown } | undefined;

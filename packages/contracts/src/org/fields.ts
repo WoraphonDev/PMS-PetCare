@@ -46,3 +46,25 @@ export function coordinatePair(value: { latitude?: number | null; longitude?: nu
 export function notEmpty(value: object, ctx: z.RefinementCtx): void {
   if (Object.keys(value).length === 0) ctx.addIssue({ code: "custom", message: "At least one field is required" });
 }
+
+const MOBILE = /^0\d{9}$/;
+const THIRTEEN_DIGITS = /^\d{13}$/;
+
+/**
+ * #rule-branch-promptpay-format (F08): a mobile number, or 13 digits whose check digit matches the PMS validation policy
+ * of T-0014-02 — S = Σ d_i × (14 − i) over d1…d12, check = (11 − S mod 11) mod 10. A valid check digit only catches typos;
+ * it says nothing about PromptPay registration or account ownership.
+ */
+export function isPromptpayId(value: string): boolean {
+  if (MOBILE.test(value)) return true;
+  if (!THIRTEEN_DIGITS.test(value)) return false;
+  const digits = [...value].map(Number);
+  const sum = digits.slice(0, 12).reduce((s, d, i) => s + d * (13 - i), 0);
+  return (11 - (sum % 11)) % 10 === digits[12];
+}
+
+/** Trimmed only: inner dashes or spaces and `+66` are rejected, never normalised. */
+export const PromptpayId = z
+  .string()
+  .trim()
+  .refine(isPromptpayId, "Must be a mobile number (0 and 9 digits) or a 13-digit ID with a valid check digit");
