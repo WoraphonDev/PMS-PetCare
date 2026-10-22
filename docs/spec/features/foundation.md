@@ -805,7 +805,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 ## 16. Staff update and remove contract (T-0017)
 
-สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0017-01 (A), T-0017-02 (A), T-0017-03 (A) บันทึกในไฟล์ `docs/questions/T-0017-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. **รอมนุษย์ยืนยันตอน merge (agent เพิ่มหลัง review 2026-10-23, ไม่ใช่การตัดสินใจที่อนุมัติแล้ว):** #rule-staff-caller-recheck และตำแหน่งของมันในลำดับ error ด้านล่าง — ขยายจาก #rule-staff-check-and-lock (ตรวจสิ่งที่ phase 1 อ่านซ้ำหลังได้ lock) ไม่เพิ่ม code ใหม่. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0017-01 (A), T-0017-02 (A), T-0017-03 (A) บันทึกในไฟล์ `docs/questions/T-0017-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. #rule-staff-caller-recheck และตำแหน่งของมันในลำดับ error ด้านล่าง **อนุมัติโดยมนุษย์ในแชท 2026-10-23** (หลัง review) — ขยายจาก #rule-staff-check-and-lock ไม่เพิ่ม code ใหม่. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
 
 <a id="rule-staff-caller-recheck"></a>
 ### ตรวจผู้เรียกซ้ำใน phase 2
@@ -872,14 +872,14 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 ## 18. Platform admin contract (T-0019, T-0020)
 
-สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0019-01 (B), T-0019-02 (A), T-0019-03 (B), T-0020-01 (A), T-0020-02 (A) บันทึกในไฟล์ `docs/questions/`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม audit action `platform.org_viewed` (§6) และ endpoint `platform.plan.list`. **ยังไม่ตัดสิน (รอมนุษย์ — `docs/questions/T-0019-04.md`):** `org_id` ของแถว `platform.org_viewed`. ไม่เพิ่ม error code, permission, คอลัมน์ หรือ migration
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0019-01 (B), T-0019-02 (A), T-0019-03 (B), T-0020-01 (A), T-0020-02 (A) บันทึกในไฟล์ `docs/questions/`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม audit action `platform.org_viewed` (§6) และ endpoint `platform.plan.list`; T-0019-04 (A) อนุมัติโดยมนุษย์ในแชท 2026-10-23. ไม่เพิ่ม error code, permission, คอลัมน์ หรือ migration
 
 <a id="rule-platform-module"></a>
 ### โครงสร้างและการเข้าถึง
 
 - ทุก endpoint `platform.*` ใช้ `PlatformAdminGuard` เดิม: ไม่มี session → `UNAUTHENTICATED`; ไม่ใช่ platform admin → `FORBIDDEN`; ยังไม่ผ่าน 2FA → `TWO_FACTOR_REQUIRED`; ไม่ใช้ `X-Org-Id`; ร้านที่ถูกระงับไม่บล็อก `platform.*` (F04)
 - module ใหม่ `platform`; การอ่านข้ามร้านทำผ่าน public read function ของ `org` และ `subscription` บน platform connection (ADR-0003) และกรองอย่างชัดเจน; การเขียนทำใน tenant transaction ของร้านนั้น (`withTenant(orgId)` บน runtime connection) ผ่าน public function ของ module เจ้าของตาราง
-- audit `platform.org_viewed` ทุกครั้งที่อ่านรายละเอียดร้าน (`platform.org.get`) — อนุมัติแล้ว (T-0019-03 B): `org_id` = **รอ T-0019-04** (agent แนะนำ: ร้านเป้าหมาย, เจ้าของร้านเห็นใน #contract-audit-list; ทางเลือก: null = แถวระดับ platform), actor = admin, `entity_type 'organization'`, `entity_id` = org id, `before`/`after` null; รายการค้นหา (`platform.org.list`) ไม่บันทึก
+- audit `platform.org_viewed` ทุกครั้งที่อ่านรายละเอียดร้าน (`platform.org.get`) (T-0019-03 B): `org_id` = ร้านเป้าหมาย (T-0019-04 A) เขียนใน tenant transaction ของร้านนั้นตามกติกาการเขียนข้อด้านบน — เจ้าของร้านเห็นใน #contract-audit-list, actor = admin, `entity_type 'organization'`, `entity_id` = org id, `before`/`after` null; รายการค้นหา (`platform.org.list`) ไม่บันทึก
 - usage ทุกจุดใช้การนับของ #rule-branch-capacity และ #rule-staff-capacity
 
 <a id="contract-platform-org-read"></a>
