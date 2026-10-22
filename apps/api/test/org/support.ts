@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { expect } from "vitest";
 import type { TestInfra } from "../support/infra";
@@ -177,4 +178,23 @@ export async function expectNoBodyRule(
   }
   expect((await app.inject({ method, url: `/api/v1${await url()}`, headers, payload: "" })).statusCode).toBe(ok);
   expect((await app.inject({ method, url: `/api/v1${await url()}`, headers: { ...headers, "content-length": "0" } })).statusCode).toBe(ok);
+  // Chunked transfer: a body is decided by the bytes received, not by the transfer-encoding header. Without a
+  // content-type, Fastify rejects any DELETE body before routing (T-0013-01), so DELETE is covered with text/plain.
+  const contentTypes: Record<string, string>[] =
+    method === "GET" ? [{}, { "content-type": "text/plain" }] : [{ "content-type": "text/plain" }];
+  for (const contentType of contentTypes) {
+    const chunked = (chunks: string[]) =>
+      url().then((path) =>
+        app.inject({
+          method,
+          url: `/api/v1${path}`,
+          headers: { ...headers, ...contentType, "transfer-encoding": "chunked" },
+          payload: Readable.from(chunks),
+        }),
+      );
+    const error = await expectError(await chunked(["x"]), 400, "VALIDATION_FAILED");
+    expect(error.details, `chunked ${JSON.stringify(contentType)}`).toMatchObject({ fields: { _: expect.any(Array) } });
+    const empty = await chunked([]);
+    expect(empty.statusCode, `empty chunked ${JSON.stringify(contentType)}: ${empty.body}`).toBe(ok);
+  }
 }

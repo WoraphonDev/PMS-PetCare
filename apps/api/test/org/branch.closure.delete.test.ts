@@ -131,7 +131,8 @@ describe("owner/manager delete a closure", () => {
       return `/branches/${s.branchIds[0]}/closures/${left[0]!.id}`;
     };
     await expectNoBodyRule(app, "DELETE", url, s.headers, 204);
-    expect(await closuresOf(infra, s.orgId)).toHaveLength(2);
+    // Three accepted calls (absent, zero-length, empty chunked) removed three of the four seeded records; rejections none.
+    expect(await closuresOf(infra, s.orgId)).toHaveLength(1);
   });
 });
 

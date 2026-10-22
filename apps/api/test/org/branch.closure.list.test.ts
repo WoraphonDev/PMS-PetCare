@@ -25,6 +25,18 @@ import {
 
 // docs/spec/features/foundation.md#ep-branch.closure.list · #contract-branch-schedule-common · #contract-branch-closures ·
 // #rule-branch-closure-calendar · F02/F04/F07 · ADR-0003 (runtime role, RLS)
+const failRead = vi.hoisted(() => ({ on: false }));
+vi.mock("../../src/modules/org/schedule.repository", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../src/modules/org/schedule.repository")>();
+  return {
+    ...original,
+    listClosures: async (...args: Parameters<typeof original.listClosures>) => {
+      if (failRead.on) throw new Error('relation "branch_closure": forced read failure secret-detail');
+      return original.listClosures(...args);
+    },
+  };
+});
+
 let infra: TestInfra;
 let app: NestFastifyApplication;
 beforeAll(async () => {
@@ -163,6 +175,24 @@ describe("branch.closure.list", () => {
     expect(foreign).toEqual([]);
     const own = await withTenant(infra.runtimeDb, s.orgId, (tx) => tx.query.branchClosure.findMany());
     expect(own).toHaveLength(1);
+  });
+
+  it("maps a database read failure to a sanitized INTERNAL without side effects", async () => {
+    const s = await seeded();
+    await insertClosureRow(infra, s.orgId, s.branchIds[0]!, "2026-01-01", "2026-01-01");
+    const before = await branchRow(infra, s.branchIds[0]!);
+    const closures = await withTenant(infra.runtimeDb, s.orgId, (tx) => tx.query.branchClosure.findMany());
+    failRead.on = true;
+    try {
+      const res = await list(s.headers, s.branchIds[0]!);
+      const error = await expectError(res, 500, "INTERNAL");
+      expect(error).toStrictEqual({ code: "INTERNAL", message: "Unexpected error" });
+      expect(res.body).not.toContain("secret-detail");
+    } finally {
+      failRead.on = false;
+    }
+    await expectNoWrites(s, before);
+    expect(await withTenant(infra.runtimeDb, s.orgId, (tx) => tx.query.branchClosure.findMany())).toEqual(closures);
   });
 
   it("applies the common schedule route errors", async () => {

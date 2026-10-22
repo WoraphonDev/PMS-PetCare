@@ -22,7 +22,7 @@ import {
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, Req } from "@nestjs/common";
 import type { OrgRequestContext } from "../../common/context";
 import { OrgScoped, RequirePermission } from "../../common/tenant.guard";
-import { assertNoBody, OrgBody } from "./org-body.pipe";
+import { assertNoBody, type NoBodyRequest, OrgBody } from "./org-body.pipe";
 import { branchClosureCreate } from "./use-cases/branch.closure.create";
 import { branchClosureDelete } from "./use-cases/branch.closure.delete";
 import { branchClosureList } from "./use-cases/branch.closure.list";
@@ -33,9 +33,8 @@ import { branchUpdate } from "./use-cases/branch.update";
 import { orgGet } from "./use-cases/org.get";
 import { orgUpdate } from "./use-cases/org.update";
 
-interface Request {
+interface Request extends NoBodyRequest {
   ctx: OrgRequestContext;
-  headers: Record<string, string | string[] | undefined>;
 }
 
 // #contract-branch-schedule-common: path ids reported by name and no query keys accepted on the schedule routes.
@@ -108,19 +107,23 @@ export class OrgController {
   @Delete("branches/:branchId/closures/:closureId")
   @HttpCode(BRANCH_CLOSURE_DELETE_STATUS)
   @RequirePermission("branch.update")
-  deleteClosure(@Req() req: Request, @Param(closureParams) params: BranchClosureParams, @Query(noQuery) _query: unknown): Promise<void> {
-    assertNoBody(req.headers);
+  async deleteClosure(
+    @Req() req: Request,
+    @Param(closureParams) params: BranchClosureParams,
+    @Query(noQuery) _query: unknown,
+  ): Promise<void> {
+    await assertNoBody(req);
     return branchClosureDelete(req.ctx, params.branchId.toLowerCase(), params.closureId.toLowerCase());
   }
 
   @Get("branches/:branchId/closures")
   @RequirePermission("org.settings.read")
-  listClosures(
+  async listClosures(
     @Req() req: Request,
     @Param(branchParams) params: { branchId: string },
     @Query(noQuery) _query: unknown,
   ): Promise<BranchClosureListResponse> {
-    assertNoBody(req.headers);
+    await assertNoBody(req);
     return branchClosureList(req.ctx, params.branchId.toLowerCase());
   }
 }
