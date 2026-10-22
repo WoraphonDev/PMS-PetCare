@@ -587,3 +587,44 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 ไม่สร้าง audit entry สำหรับ schedule mutations ใน T-0013 เพราะ §6 ไม่มี action นี้; ห้าม reuse branch.updated audit หรือ invent schedule action. Outbox ยังคง required และต้องทดสอบ rollback. การเพิ่ม audit ต้อง human-approved amendment ระบุ action/entity/before-after/privacy และ tests แยกก่อน.
 
 ขอบเขตหนึ่ง implementation card: สี่ endpoints, existing schema/org module/permissions, no dependencies/migrations/UI/payments/auth changes/booking/relay/new hours read. วางแผนและวัด <600 non-test changed LOC ตาม AGENTS; ถ้าไม่พอหยุดขอ human-assigned split ไม่ mint T-0013A/B หรือใช้ T-0014. Card ที่แนบเป็น proposed จน human spec/card merge; merge ไม่ได้พิสูจน์ runtime tests หรือ dispatch implementation อัตโนมัติ.
+
+
+## 13. Branch payment settings contract (T-0014)
+
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-22** — T-0014-01 (A), T-0014-02 (A, ยกเว้นสูตร checksum ดู #rule-branch-promptpay-format), T-0014-03 (A), T-0014-04 (B สำหรับ MVP) บันทึกในไฟล์ `docs/questions/T-0014-0N.md`. ข้อความนี้เป็น spec ที่มีผลเมื่อมนุษย์ merge เท่านั้น; ห้ามเริ่ม implementation T-0014 ก่อน merge และก่อน T-0014-02 ปิด. ไม่เพิ่ม error code, permission, audit action, outbox event, คอลัมน์ หรือ migration
+
+<a id="contract-branch-payment-settings"></a>
+### `branch.paymentSettings.update` wire contract
+
+- `PUT /branches/{branchId}/payment-settings` · สิทธิ์ `branch.payment_settings.update` (owner เท่านั้น ตาม #permissions; manager และ role ระดับสาขา → `FORBIDDEN`)
+- ใช้กติการ่วมของ §11: body เป็น strict JSON object `{ promptpayId }` — ต้องมี key `promptpayId`; ค่าเป็น string ที่ผ่าน #rule-branch-promptpay-format หลัง trim หรือ `null` เพื่อล้างค่า (สาขาไม่มี PromptPay); key ขาด, key อื่น (รวม `version`, `orgId`, `id`, ฟิลด์ของ `branch.update`) หรือชนิดผิด → `VALIDATION_FAILED` + `details.fields.<key>`
+- `branchId` ไม่ใช่ UUID → `VALIDATION_FAILED`; ไม่พบหรือเป็นของ org อื่น → `NOT_FOUND` (F07); org `suspended` → `ORG_SUSPENDED` (F04); `UNAUTHENTICATED` / `PASSWORD_CHANGE_REQUIRED` ตาม guard เดิม; ข้อผิดพลาดอื่น → `INTERNAL` (rollback ทั้งหมด)
+- query string: พฤติกรรมเดียวกับ `branch.update` (ไม่มีกติกาเพิ่ม)
+- ตอบ **200** `Branch` DTO (#contract-branch) หลังการเปลี่ยน (หรือ DTO ปัจจุบันเมื่อ no-op) — `promptpayId` ใน DTO เป็นค่าจริง ไม่ mask
+- ข้อความ error และ `details` ห้ามมีค่า `promptpayId` ที่ส่งมา
+
+<a id="rule-branch-promptpay-format"></a>
+### F08 — รูปแบบ PromptPay ID (รายละเอียด)
+
+- trim เฉพาะ whitespace หัวท้าย; **ไม่** ตัดขีดหรือช่องว่างภายใน, **ไม่** แปลง `+66`; ค่าที่บันทึกคือค่าหลัง trim
+- เบอร์มือถือ: ตรง `^0\d{9}$` ตาม F08 (ไม่มีกติกา prefix ผู้ให้บริการเพิ่ม)
+- เลข 13 หลัก: `^\d{13}$` ไม่จำกัดเลขหลักแรก (รวม `0` เช่นเลขนิติบุคคล) และ check digit ต้องถูก — **สูตร check digit ยังไม่กำหนด**: รอ T-0014-02 ยืนยันจากแหล่งอ้างอิงทางการ (ดูไฟล์คำถาม) แล้วเพิ่มสูตรในหัวข้อนี้ด้วย spec PR ที่มนุษย์ merge; ห้าม implement สูตรก่อนนั้น
+- รูปแบบอื่นทั้งหมด (ว่างหลัง trim, 9/11/12/14 หลัก, ตัวอักษร, ขีด, ช่องว่างภายใน, `+66…`) → `VALIDATION_FAILED` ที่ `details.fields.promptpayId`
+
+<a id="rule-branch-payment-settings-write"></a>
+### การเขียน, no-op, version
+
+- ใน `ctx.db.run` transaction เดียว: lock แถว branch (เหมือน `branch.update`) แล้วเทียบค่าหลัง trim กับค่าที่บันทึกอยู่
+- ค่าเท่าเดิม (รวม `null` → `null`): ตอบ 200 DTO ปัจจุบัน ไม่ UPDATE, ไม่เพิ่ม `version`, ไม่เปลี่ยน `updated_at`, ไม่มี audit
+- ค่าเปลี่ยนจริง: `UPDATE` statement เดียวตั้ง `promptpay_id`, `version = version + 1`, `updated_at = ctx.now` แล้วอ่าน `version` จาก `RETURNING` (#rule-branch-version) ไม่แตะคอลัมน์อื่น; เขียน audit ตาม #rule-branch-payment-settings-audit ใน transaction เดียวกัน
+- **ไม่มี outbox event** (ตาม #rule-branch-version) — `branch.updated` ไม่ถูกส่งจาก endpoint นี้ และ payload ของ `branch.created`/`branch.updated` ยังไม่รวม `promptpayId` เหมือนเดิม
+- request ที่ถูกปฏิเสธ หรือ transaction ล้มเหลว: ไม่มีการเปลี่ยนค่า, version, `updated_at` หรือ audit
+
+<a id="rule-branch-payment-settings-audit"></a>
+### Audit `branch.payment_settings_updated` (MVP)
+
+- `action = 'branch.payment_settings_updated'`, `entity_type = 'branch'`, `entity_id = branch.id`, `actor_user_id` = ผู้เรียก, `occurred_at = ctx.now`, `org_id` = org ปัจจุบัน
+- `before = { promptpayId: <ค่าเดิมแบบ mask> }`, `after = { promptpayId: <ค่าใหม่แบบ mask> }`
+- กติกา mask: แทนทุกหลักก่อน 4 หลักสุดท้ายด้วย `*` — เบอร์ 10 หลัก `0812345678` → `******5678`; เลข 13 หลัก `1234567890123` → `*********0123`; `null` คงเป็น `null`
+- ห้ามมีค่าเต็มใน audit payload, application log หรือ error message; การ mask ใช้กับ audit เท่านั้น ไม่เปลี่ยนค่าที่เก็บใน `branch` หรือ `Branch` DTO
+- เหตุผล: การเปิดเผยเลขเพื่อรับชำระเงินไม่ได้แปลว่าเก็บสำเนาเต็มใน audit ได้โดยอัตโนมัติ; 4 หลักท้ายพอสำหรับตรวจว่าบัญชีรับเงินถูกเปลี่ยน
