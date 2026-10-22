@@ -56,6 +56,14 @@ export async function lockMemberships(tx: Tx, userIds: readonly string[]): Promi
   return rows;
 }
 
+/** Locks one membership of this organization (RLS hides the others); undefined when absent. */
+export async function lockMembership(tx: Tx, id: string): Promise<{ id: string; userId: string; role: Role; status: string } | undefined> {
+  const { rows } = await transactionQuery(tx)<{ id: string; user_id: string; role: Role; status: string }>`
+    SELECT id, user_id, role, status FROM membership WHERE id = ${id} FOR UPDATE`;
+  const [row] = rows;
+  return row && { id: row.id, userId: row.user_id, role: row.role, status: row.status };
+}
+
 /** Branch ids of this organization among `ids` (RLS hides other organizations' branches — F07). */
 export async function existingBranchIds(tx: Tx, ids: readonly string[]): Promise<Set<string>> {
   if (ids.length === 0) return new Set();

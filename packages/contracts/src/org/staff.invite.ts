@@ -4,8 +4,22 @@ import { strictBody } from "./fields";
 
 const ORG_WIDE = new Set(["owner", "manager"]);
 
-// docs/spec/features/foundation.md#contract-staff-invite — BRANCH_REQUIRED (a branch role with no branch) is decided
-// by the use case after the manager rule, so an empty list passes here.
+export const BranchIds = z.array(z.uuid().transform((id) => id.toLowerCase()));
+
+/**
+ * #contract-staff-invite role/branch rules, shared with #contract-staff-account-create. BRANCH_REQUIRED (a branch role
+ * with no branch) is decided by the use case after the manager rule, so an empty list passes here.
+ */
+export function roleBranchRules(value: { role: string; branchIds: readonly string[] }, ctx: z.RefinementCtx): void {
+  if (new Set(value.branchIds).size !== value.branchIds.length) {
+    ctx.addIssue({ code: "custom", path: ["branchIds"], message: "Branch ids must be unique" });
+  }
+  if (ORG_WIDE.has(value.role) && value.branchIds.length > 0) {
+    ctx.addIssue({ code: "custom", path: ["branchIds"], message: "Owner and manager take no branches" });
+  }
+}
+
+// docs/spec/features/foundation.md#contract-staff-invite
 export const StaffInviteRequest = strictBody({
   email: z
     .string()
@@ -15,15 +29,8 @@ export const StaffInviteRequest = strictBody({
     .pipe(z.email())
     .refine((email) => !email.endsWith("@managed.invalid"), "Must be a real email address"),
   role: StaffRole,
-  branchIds: z.array(z.uuid().transform((id) => id.toLowerCase())),
-}).superRefine((value, ctx) => {
-  if (new Set(value.branchIds).size !== value.branchIds.length) {
-    ctx.addIssue({ code: "custom", path: ["branchIds"], message: "Branch ids must be unique" });
-  }
-  if (ORG_WIDE.has(value.role) && value.branchIds.length > 0) {
-    ctx.addIssue({ code: "custom", path: ["branchIds"], message: "Owner and manager invitations take no branches" });
-  }
-});
+  branchIds: BranchIds,
+}).superRefine(roleBranchRules);
 export type StaffInviteRequest = z.infer<typeof StaffInviteRequest>;
 
 // No token and no hash, ever.
