@@ -125,13 +125,16 @@ describe("owner/manager delete a closure", () => {
 
   it("accepts absent and zero-byte bodies and rejects nonempty ones at `_`", async () => {
     const s = await seeded();
+    // T-0040: one more branch-A record for the extra accepted call (empty chunked body without a content-type).
+    await insertClosureRow(infra, s.orgId, s.branchIds[0]!, "2026-03-01", "2026-03-01");
     // Each accepted call deletes one record, so the URL always targets a closure of branch A that still exists.
     const url = async () => {
       const left = (await closuresOf(infra, s.orgId)).filter((r) => r.branch_id === s.branchIds[0]);
       return `/branches/${s.branchIds[0]}/closures/${left[0]!.id}`;
     };
     await expectNoBodyRule(app, "DELETE", url, s.headers, 204);
-    // Three accepted calls (absent, zero-length, empty chunked) removed three of the four seeded records; rejections none.
+    // Four accepted calls (absent, zero-length, empty chunked without and with text/plain) removed the four branch-A
+    // records; rejections none. Branch B's record is left.
     expect(await closuresOf(infra, s.orgId)).toHaveLength(1);
   });
 });
