@@ -591,7 +591,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 ## 13. Branch payment settings contract (T-0014)
 
-สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-22** — T-0014-01 (A), T-0014-02 (A, ยกเว้นสูตร checksum ดู #rule-branch-promptpay-format), T-0014-03 (A), T-0014-04 (B สำหรับ MVP) บันทึกในไฟล์ `docs/questions/T-0014-0N.md`. ข้อความนี้เป็น spec ที่มีผลเมื่อมนุษย์ merge เท่านั้น; ห้ามเริ่ม implementation T-0014 ก่อน merge และก่อน T-0014-02 ปิด. ไม่เพิ่ม error code, permission, audit action, outbox event, คอลัมน์ หรือ migration
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-22** — T-0014-01 (A), T-0014-02 (A + สูตร check digit เป็น validation policy ของ PMS), T-0014-03 (A), T-0014-04 (B สำหรับ MVP) บันทึกในไฟล์ `docs/questions/T-0014-0N.md`. ข้อความนี้เป็น spec ที่มีผลเมื่อมนุษย์ merge เท่านั้น; ห้ามเริ่ม implementation T-0014 ก่อน merge. ไม่เพิ่ม error code, permission, audit action, outbox event, คอลัมน์ หรือ migration
 
 <a id="contract-branch-payment-settings"></a>
 ### `branch.paymentSettings.update` wire contract
@@ -608,7 +608,9 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 - trim เฉพาะ whitespace หัวท้าย; **ไม่** ตัดขีดหรือช่องว่างภายใน, **ไม่** แปลง `+66`; ค่าที่บันทึกคือค่าหลัง trim
 - เบอร์มือถือ: ตรง `^0\d{9}$` ตาม F08 (ไม่มีกติกา prefix ผู้ให้บริการเพิ่ม)
-- เลข 13 หลัก: `^\d{13}$` ไม่จำกัดเลขหลักแรก (รวม `0` เช่นเลขนิติบุคคล) และ check digit ต้องถูก — **สูตร check digit ยังไม่กำหนด**: รอ T-0014-02 ยืนยันจากแหล่งอ้างอิงทางการ (ดูไฟล์คำถาม) แล้วเพิ่มสูตรในหัวข้อนี้ด้วย spec PR ที่มนุษย์ merge; ห้าม implement สูตรก่อนนั้น
+- เลข 13 หลัก: `^\d{13}$` ไม่จำกัดเลขหลักแรก (รวม `0` เช่นเลขนิติบุคคล) และ check digit ต้องถูกตามสูตรนี้ — ให้ d1…d13 เป็นตัวเลขแต่ละหลัก, `S = Σ_{i=1..12} d_i × (14 − i)`, `checkDigit = (11 − (S mod 11)) mod 10`, ยอมรับเมื่อ `d13 = checkDigit`
+  - ที่มา: **human decision 2026-10-22 (T-0014-02) เป็น validation policy ของ PMS** — ไม่ใช่การรับรองว่าหน่วยงานรัฐยืนยันสูตรหรือขอบเขตแล้ว. แหล่งทางการที่พบ (กรมสรรพากร: เลข `099…` ใช้วิธีเดียวกับเลขของกรมการปกครอง; มาตรฐานข้อมูลกลาง: หลักที่ 13 เป็น check digit) ไม่ระบุสูตร และไม่ระบุว่าเลข DBD `010–096` ใช้วิธีเดียวกัน; สูตรและ test vectors มาจากแหล่งรอง (python-stdnum) — รายละเอียดใน `docs/questions/T-0014-02.md`
+  - check digit ที่ถูกต้องตรวจได้แค่การพิมพ์ผิด **ไม่ได้ยืนยัน** ว่าเลขนั้นลงทะเบียน PromptPay แล้ว, ว่ามีบัญชีอยู่จริง หรือว่าบัญชีเป็นของร้าน/ผู้ใช้; PMS ไม่ตรวจสิ่งเหล่านี้ใน MVP และ UI/ข้อความต้องไม่อ้างว่าตรวจแล้ว
 - รูปแบบอื่นทั้งหมด (ว่างหลัง trim, 9/11/12/14 หลัก, ตัวอักษร, ขีด, ช่องว่างภายใน, `+66…`) → `VALIDATION_FAILED` ที่ `details.fields.promptpayId`
 
 <a id="rule-branch-payment-settings-write"></a>
