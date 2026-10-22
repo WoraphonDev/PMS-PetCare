@@ -40,7 +40,7 @@ T-0008 กับ T-0009 ทำขนานกันได้
 | [T-0040](T-0040.md) | DELETE bodies without Content-Type reach the route (T-0013-01); depends T-0013 | |
 | [T-0041](T-0041.md) | test DB teardown waits for pool clients to close (CI `57P01` unhandled-error flake); test only | |
 | [T-0014](T-0014.md) | `branch.paymentSettings.update` (F08) — spec §13; T-0014-01…04 answered (02: check-digit formula is a human-approved PMS policy); human merge of card + §13 before implementation | ✓ |
-| T-0015 | `staff.list`, `staff.invite`, `staff.invitation.revoke`, `invitation.accept` (F03) | |
+| [T-0015](T-0015.md) | `staff.list`, `staff.invite`, `staff.invitation.revoke`, `invitation.accept` (F03) — proposed card; T-0015-01…07 open; human merge of card + §14 before implementation | |
 | T-0016 | `staff.account.create`, `staff.password.reset` (F09) | |
 | T-0017 | `staff.update`, `staff.remove` (F01, F02) | |
 | T-0018 | `audit.list`, `subscription.get` | |
