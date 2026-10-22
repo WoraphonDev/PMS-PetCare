@@ -187,11 +187,9 @@ export async function expectNoBodyRule(
   expect(jsonError.details, 'chunked JSON ""').toMatchObject({ fields: { _: expect.any(Array) } });
   expect((await app.inject({ method, url: `/api/v1${await url()}`, headers, payload: "" })).statusCode).toBe(ok);
   expect((await app.inject({ method, url: `/api/v1${await url()}`, headers: { ...headers, "content-length": "0" } })).statusCode).toBe(ok);
-  // Chunked transfer: a body is decided by the bytes received, not by the transfer-encoding header. Without a
-  // content-type, Fastify rejects any DELETE body before routing (T-0013-01), so DELETE is covered with text/plain.
-  const contentTypes: Record<string, string>[] =
-    method === "GET" ? [{}, { "content-type": "text/plain" }] : [{ "content-type": "text/plain" }];
-  for (const contentType of contentTypes) {
+  // Chunked transfer: a body is decided by the bytes received, not by the transfer-encoding header. Since T-0040 a
+  // DELETE body without a content-type reaches the route too (T-0013-01).
+  for (const contentType of [{}, { "content-type": "text/plain" }]) {
     const chunked = (chunks: string[]) =>
       url().then((path) =>
         app.inject({

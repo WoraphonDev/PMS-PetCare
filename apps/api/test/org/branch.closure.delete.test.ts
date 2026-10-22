@@ -131,8 +131,9 @@ describe("owner/manager delete a closure", () => {
       return `/branches/${s.branchIds[0]}/closures/${left[0]!.id}`;
     };
     await expectNoBodyRule(app, "DELETE", url, s.headers, 204);
-    // Three accepted calls (absent, zero-length, empty chunked) removed three of the four seeded records; rejections none.
-    expect(await closuresOf(infra, s.orgId)).toHaveLength(1);
+    // Four accepted calls (absent, zero-length, empty chunked without and with text/plain) removed all four seeded
+    // records; rejections none. T-0040 added the empty chunked call without a content-type.
+    expect(await closuresOf(infra, s.orgId)).toHaveLength(0);
   });
 });
 
