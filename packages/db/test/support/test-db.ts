@@ -22,6 +22,24 @@ const ROLES_SQL = `
     grant usage, select on sequences to app_runtime, app_platform;
 `;
 
+/** Ends the pool and resolves once every client's socket has closed (T-0041: else Postgres' stop sends 57P01). */
+async function endPool(pool: pg.Pool): Promise<void> {
+  let pending = pool.totalCount;
+  const closed = new Promise<void>((resolve) => {
+    if (pending === 0) return resolve();
+    const onRemove = () => {
+      pending -= 1;
+      if (pending === 0) {
+        pool.off("remove", onRemove);
+        resolve();
+      }
+    };
+    pool.on("remove", onRemove);
+  });
+  await pool.end();
+  await closed;
+}
+
 export interface TestDb {
   runtimeDb: Db;
   /** Connection URL of the runtime role, for tests that need their own pool. */
@@ -59,7 +77,7 @@ export async function createTestDb(): Promise<TestDb> {
     platformDb,
     migratorDb,
     async stop() {
-      await Promise.all([runtimeDb.$client.end(), platformDb.$client.end(), migratorDb.$client.end()]);
+      await Promise.all([runtimeDb.$client, platformDb.$client, migratorDb.$client].map(endPool));
       await container.stop();
     },
   };
