@@ -65,6 +65,7 @@ describe("DELETE body without content-type reaches the route", () => {
   it("an unknown content-type with a body is unchanged from main: 415 → VALIDATION_FAILED without details", async () => {
     const s = await seeded();
     const res = await raw("DELETE", s.url, { ...s.headers, "content-type": "application/x-unknown" }, "x");
+    expect(res.statusCode).toBe(400);
     expect(res.json()).toStrictEqual(REJECTED);
     expect(await closuresOf(infra, s.orgId)).toHaveLength(1);
   });
