@@ -3,6 +3,7 @@ import { writeAudit } from "@app/db";
 import { AppError } from "../../../common/app-error";
 import { assertBranchInScope, type OrgRequestContext } from "../../../common/context";
 import { maskPromptpayId } from "../changes";
+import { withoutParams } from "../db-error";
 import { lockBranch, toBranch, updateBranchPromptpay } from "../org.repository";
 
 /**
@@ -37,20 +38,6 @@ export async function branchPaymentSettingsUpdate(
     });
   } catch (error) {
     if (error instanceof AppError) throw error;
-    throw redacted(error);
+    throw withoutParams("branch.paymentSettings.update", error);
   }
-}
-
-/**
- * ErrorFilter logs `{ err }`, and a DrizzleQueryError (or a pg error's `detail`) carries the query params — the full
- * PromptPay ID. Only the SQLSTATE survives into the INTERNAL log entry.
- */
-function redacted(error: unknown): Error {
-  let e = error as { code?: unknown; cause?: unknown } | undefined;
-  for (let depth = 0; e && typeof e === "object" && depth < 5; depth++, e = e.cause as typeof e) {
-    if (typeof e.code === "string" && /^[0-9A-Z]{5}$/.test(e.code)) {
-      return new Error(`branch.paymentSettings.update failed (SQLSTATE ${e.code})`);
-    }
-  }
-  return new Error("branch.paymentSettings.update failed");
 }

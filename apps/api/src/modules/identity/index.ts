@@ -56,6 +56,7 @@ export {
   type SignupLimiter,
   signupLimiter,
 } from "./rate-limit";
+export { type StaffProfile, staffProfiles, usersByEmail } from "./staff-directory";
 export { hasTwoFactorSession, platformSession } from "./two-factor-session";
 export { captureVerificationAfterCommit } from "./verification-collector";
 export { captureSignupVerification } from "./verification-email";
