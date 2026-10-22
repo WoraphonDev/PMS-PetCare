@@ -212,7 +212,9 @@ describe("staff.account.create happy path", () => {
   it("end to end: username login, PASSWORD_CHANGE_REQUIRED on GET /staff with the guard's exceptions intact, then normal access", async () => {
     const s = await shop();
     const username = freshUsername();
-    expect((await create(s.headers, body({ username, role: "front_desk", branchIds: [s.branchIds[0]!] }))).statusCode).toBe(201);
+    const created = await create(s.headers, body({ username, role: "front_desk", branchIds: [s.branchIds[0]!] }));
+    expect(created.statusCode).toBe(201);
+    const userIdOf = (created.json() as { userId: string }).userId;
     const logged = await login(username.toUpperCase());
     expect(logged.statusCode, logged.body).toBe(200);
     expect(logged.json()).toEqual({ twoFactorRequired: false, mustChangePassword: true });
@@ -231,6 +233,12 @@ describe("staff.account.create happy path", () => {
     expect(changed.statusCode, changed.body).toBe(204);
     expect((await call(app, "GET", "/staff", headers)).statusCode).toBe(200);
     expect((await login(username, "second-pass-456")).json()).toEqual({ twoFactorRequired: false, mustChangePassword: false });
+    // #rule-email-login-policy (T-0016-05): the placeholder email never logs in, no session.
+    const sessionsBefore = await infra.platformDb.query.session.findMany({ where: (x, { eq }) => eq(x.userId, userIdOf) });
+    const byPlaceholder = await login(`${userIdOf}@managed.invalid`, "second-pass-456");
+    await expectError(byPlaceholder, 401, "UNAUTHENTICATED");
+    expect(byPlaceholder.headers["set-cookie"]).toBeUndefined();
+    expect(await infra.platformDb.query.session.findMany({ where: (x, { eq }) => eq(x.userId, userIdOf) })).toEqual(sessionsBefore);
   });
 });
 

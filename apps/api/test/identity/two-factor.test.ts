@@ -382,7 +382,7 @@ it("logs contain no TOTP secrets, backup codes or passwords", () => {
 });
 
 it(
-  "unverified managed accounts retain must-change, 2FA and trusted-device behavior in both login modes",
+  "unverified managed accounts retain must-change, 2FA and trusted-device behavior in username login; email login is refused",
   async () => {
     mockTime();
     const f = await enabled();
@@ -395,7 +395,11 @@ it(
       'update "user" set is_managed = true, managed_by_org_id = $1, email_verified = false, must_change_password = true, username = $2 where id = $3',
       [orgId, "managed.2fa", f.id],
     );
-    for (const identifier of [f.email, "managed.2fa"]) {
+    // T-0016-05 (#rule-email-login-policy): managed accounts log in by username only.
+    const byEmail = await login(f.email);
+    expect(byEmail.statusCode).toBe(401);
+    expect(byEmail.headers["set-cookie"]).toBeUndefined();
+    for (const identifier of ["managed.2fa"]) {
       const pending = await login(identifier);
       expect(pending.statusCode).toBe(200);
       expect(pending.json()).toEqual({ twoFactorRequired: true, mustChangePassword: true });
