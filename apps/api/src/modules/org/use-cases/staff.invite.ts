@@ -14,6 +14,7 @@ import {
   countSeats,
   existingBranchIds,
   insertInvitation,
+  isOrgSuspended,
   lockMemberships,
   lockPendingInvitations,
   revokeInvitations,
@@ -43,6 +44,8 @@ export async function staffInvite(ctx: OrgRequestContext, input: StaffInviteRequ
       // 5: subscription, then this email's pending invitations.
       const limit = await lockStaffLimit({ tx, orgId: ctx.org.id });
       const pending = await lockPendingInvitations(tx, input.email, ctx.now);
+      // F04 may have changed while this request waited for the locks.
+      if (await isOrgSuspended(tx, ctx.org.id)) throw new AppError("ORG_SUSPENDED");
       // 6: F07 — unknown and other-org branch ids look the same.
       const branches = await existingBranchIds(tx, input.branchIds);
       if (input.branchIds.some((id) => !branches.has(id))) throw new AppError("NOT_FOUND");

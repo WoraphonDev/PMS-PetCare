@@ -307,3 +307,27 @@ export async function invitationsOf(infra: TestInfra, orgId: string) {
 export async function membershipsOf(infra: TestInfra, orgId: string) {
   return infra.platformDb.query.membership.findMany({ where: (m, { eq }) => eq(m.orgId, orgId) });
 }
+
+/**
+ * Holds the org's subscription row lock (#rule-staff-check-and-lock step 1) in another transaction until `release`.
+ * `waiting()` resolves once some other backend is blocked on a lock, so a test can change state mid-request.
+ */
+export async function holdSubscriptionLock(infra: TestInfra, orgId: string) {
+  const client = await infra.platformDb.$client.connect();
+  await client.query("begin");
+  await client.query("select 1 from subscription where org_id = $1 for update", [orgId]);
+  return {
+    async waiting() {
+      for (let i = 0; i < 200; i++) {
+        const { rows } = await infra.platformDb.$client.query<{ n: number }>("select count(*)::int as n from pg_locks where not granted");
+        if (rows[0]!.n > 0) return;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      throw new Error("no request ever waited on the subscription lock");
+    },
+    async release() {
+      await client.query("commit");
+      client.release();
+    },
+  };
+}

@@ -13,6 +13,7 @@ import {
   expectGuardErrors,
   expectNoBodyRule,
   FIXED_NOW,
+  holdSubscriptionLock,
   insertInvitationRow,
   invitationsOf,
   seedStaffPlan,
@@ -117,6 +118,22 @@ describe("staff.invitation.revoke", () => {
     await suspend(infra, s.orgId);
     await expectError(await revoke(s.headers, id), 423, "ORG_SUSPENDED");
     expect(await rowOf(s.orgId, id)).toMatchObject({ revokedAt: null });
+  });
+
+  it("re-checks the organization status after the locks: suspended while waiting → ORG_SUSPENDED, row unchanged", async () => {
+    const s = await shop();
+    const id = await pending(s);
+    const before = await rowOf(s.orgId, id);
+    const lock = await holdSubscriptionLock(infra, s.orgId);
+    const res = revoke(s.headers, id);
+    try {
+      await lock.waiting();
+      await suspend(infra, s.orgId);
+    } finally {
+      await lock.release();
+    }
+    await expectError(await res, 423, "ORG_SUSPENDED");
+    expect(await rowOf(s.orgId, id)).toEqual(before);
   });
 
   it("fails closed with INTERNAL when the organization has no subscription", async () => {

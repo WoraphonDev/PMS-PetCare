@@ -100,3 +100,9 @@ export async function listPendingInvitations(tx: Tx, now: Date): Promise<Invitat
     where: (i, { and, gt, isNull }) => and(isNull(i.acceptedAt), isNull(i.revokedAt), gt(i.expiresAt, now)),
   });
 }
+
+/** Phase-2 re-check of what the org guard read in phase 1 (#rule-staff-check-and-lock). */
+export async function isOrgSuspended(tx: Tx, orgId: string): Promise<boolean> {
+  const org = await tx.query.organization.findFirst({ columns: { status: true }, where: (o, { eq }) => eq(o.id, orgId) });
+  return org?.status !== "active";
+}

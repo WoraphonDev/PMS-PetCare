@@ -18,8 +18,10 @@ import {
   expectGuardErrors,
   expectUnknownKeysRejected,
   FIXED_NOW,
+  holdSubscriptionLock,
   insertInvitationRow,
   invitationsOf,
+  membershipsOf,
   outboxOf,
   seedStaffPlan,
   suspend,
@@ -97,9 +99,17 @@ async function shop(role: "owner" | "manager" = "owner", maxStaff: number | null
   await seedStaffPlan(infra, s.orgId, maxStaff);
   return s;
 }
-async function expectNothingWritten(orgId: string, invitationCount = 0, auditCount = 0) {
-  expect(await invitationsOf(infra, orgId)).toHaveLength(invitationCount);
-  expect(await auditOf(infra, orgId)).toHaveLength(auditCount);
+/** Every row a rejected invite could touch: invitations (full contents), memberships, their branches and audit. */
+async function snapshot(orgId: string) {
+  const { rows: membershipBranches } = await infra.platformDb.$client.query(
+    "select membership_id, branch_id from membership_branch where org_id = $1 order by membership_id, branch_id",
+    [orgId],
+  );
+  const memberships = (await membershipsOf(infra, orgId)).sort((a, b) => (a.id < b.id ? -1 : 1));
+  return { invitations: await invitationsOf(infra, orgId), memberships, membershipBranches, audit: await auditOf(infra, orgId) };
+}
+async function expectNothingWritten(orgId: string, before: Awaited<ReturnType<typeof snapshot>>) {
+  expect(await snapshot(orgId)).toEqual(before);
   expect(mail.sent).toEqual([]);
 }
 
@@ -210,14 +220,21 @@ describe("re-invite (F03)", () => {
 
   it("forbids a manager whose re-invite would revoke a pending owner/manager invitation, and changes nothing", async () => {
     const s = await shop("manager");
-    for (const role of ["owner", "manager"] as const) {
-      const email = freshEmail();
-      const id = await insertInvitationRow(infra, { orgId: s.orgId, email, role, invitedByUserId: s.userId, expiresAt: new Date(EXPIRES) });
-      const before = (await invitationsOf(infra, s.orgId)).find((r) => r.id === id);
-      await expectError(await invite(s.headers, { email, role: "front_desk", branchIds: [s.branchIds[0]!] }), 403, "FORBIDDEN");
-      expect((await invitationsOf(infra, s.orgId)).find((r) => r.id === id)).toEqual(before);
+    const emails = [freshEmail(), freshEmail()];
+    for (const [i, role] of (["owner", "manager"] as const).entries()) {
+      await insertInvitationRow(infra, {
+        orgId: s.orgId,
+        email: emails[i]!,
+        role,
+        invitedByUserId: s.userId,
+        expiresAt: new Date(EXPIRES),
+      });
     }
-    await expectNothingWritten(s.orgId, 2);
+    const before = await snapshot(s.orgId);
+    for (const email of emails) {
+      await expectError(await invite(s.headers, { email, role: "front_desk", branchIds: [s.branchIds[0]!] }), 403, "FORBIDDEN");
+    }
+    await expectNothingWritten(s.orgId, before);
     const branchRole = freshEmail();
     await insertInvitationRow(infra, {
       orgId: s.orgId,
@@ -239,25 +256,43 @@ describe("staff.invite errors in §14 order", () => {
     for (const role of ["front_desk", "groomer", "caretaker"] as const) {
       const s = await seedOrg(app, infra, { role, branches: ["A"] });
       await seedStaffPlan(infra, s.orgId, 5);
+      const before = await snapshot(s.orgId);
       await expectError(await invite(s.headers, { email: freshEmail(), role: "groomer", branchIds: s.branchIds }), 403, "FORBIDDEN");
-      await expectNothingWritten(s.orgId);
+      await expectNothingWritten(s.orgId, before);
     }
   });
 
   it("returns ORG_SUSPENDED for a suspended organization", async () => {
     const s = await shop();
     await suspend(infra, s.orgId);
+    const before = await snapshot(s.orgId);
     await expectError(
       await invite(s.headers, { email: freshEmail(), role: "groomer", branchIds: [s.branchIds[0]!] }),
       423,
       "ORG_SUSPENDED",
     );
-    await expectNothingWritten(s.orgId);
+    await expectNothingWritten(s.orgId, before);
+  });
+
+  it("re-checks the organization status after the locks: suspended while waiting → ORG_SUSPENDED, nothing written", async () => {
+    const s = await shop();
+    const before = await snapshot(s.orgId);
+    const lock = await holdSubscriptionLock(infra, s.orgId);
+    const pending = invite(s.headers, { email: freshEmail(), role: "groomer", branchIds: [s.branchIds[0]!] });
+    try {
+      await lock.waiting();
+      await suspend(infra, s.orgId);
+    } finally {
+      await lock.release();
+    }
+    await expectError(await pending, 423, "ORG_SUSPENDED");
+    await expectNothingWritten(s.orgId, before);
   });
 
   it("rejects invalid bodies at details.fields.<key>", async () => {
     const s = await shop();
     const ok = { email: freshEmail(), role: "groomer", branchIds: [s.branchIds[0]!] };
+    const before = await snapshot(s.orgId);
     for (const [body, field] of [
       [{ ...ok, email: "nope" }, "email"],
       [{ ...ok, email: `${randomUUID()}@managed.invalid` }, "email"],
@@ -272,46 +307,50 @@ describe("staff.invite errors in §14 order", () => {
       expect(Object.keys((error.details as { fields: object }).fields), JSON.stringify(body)).toContain(field);
     }
     await expectUnknownKeysRejected((body) => invite(s.headers, body), ok);
-    await expectNothingWritten(s.orgId);
+    await expectNothingWritten(s.orgId, before);
   });
 
   it("forbids a manager from inviting owner/manager (before BRANCH_REQUIRED and the plan limit); a bad body still wins", async () => {
     const s = await shop("manager", 1);
+    const before = await snapshot(s.orgId);
     for (const role of ["owner", "manager"] as const) {
       await expectError(await invite(s.headers, { email: freshEmail(), role, branchIds: [] }), 403, "FORBIDDEN");
     }
     await expectError(await invite(s.headers, { email: "bad", role: "owner", branchIds: [] }), 400, "VALIDATION_FAILED");
-    await expectNothingWritten(s.orgId);
+    await expectNothingWritten(s.orgId, before);
   });
 
   it("requires a branch for branch roles (BRANCH_REQUIRED), before branch lookup", async () => {
     const s = await shop();
+    const before = await snapshot(s.orgId);
     for (const role of ["front_desk", "groomer", "caretaker"] as const) {
       await expectError(await invite(s.headers, { email: freshEmail(), role, branchIds: [] }), 400, "BRANCH_REQUIRED");
     }
-    await expectNothingWritten(s.orgId);
+    await expectNothingWritten(s.orgId, before);
   });
 
   it("answers NOT_FOUND for an unknown branch id and for another organization's branch id alike (F07)", async () => {
     const s = await shop();
     const other = await shop();
     const member = await addMember(app, infra, s.orgId, { role: "groomer", branchIds: [s.branchIds[0]!] });
+    const before = await snapshot(s.orgId);
     for (const branchIds of [[randomUUID()], [other.branchIds[0]], [s.branchIds[0]!, other.branchIds[0]]]) {
       const res = await invite(s.headers, { email: freshEmail(), role: "groomer", branchIds });
       await expectError(res, 404, "NOT_FOUND");
     }
     // Step 6 comes before ALREADY_MEMBER (step 8).
     await expectError(await invite(s.headers, { email: member.email, role: "groomer", branchIds: [randomUUID()] }), 404, "NOT_FOUND");
-    await expectNothingWritten(s.orgId);
+    await expectNothingWritten(s.orgId, before);
   });
 
   it("answers ALREADY_MEMBER for an active member's email, in any case, before the plan limit", async () => {
     const s = await shop("owner", 2);
     const member = await addMember(app, infra, s.orgId, { role: "groomer", branchIds: [s.branchIds[0]!] });
+    const before = await snapshot(s.orgId);
     for (const email of [member.email, member.email.toUpperCase()]) {
       await expectError(await invite(s.headers, { email, role: "caretaker", branchIds: [s.branchIds[1]!] }), 409, "ALREADY_MEMBER");
     }
-    await expectNothingWritten(s.orgId);
+    await expectNothingWritten(s.orgId, before);
   });
 
   it("counts owner, active members and unexpired pending invitations against max_staff; expired ones and a re-invite's own row do not count", async () => {
@@ -327,14 +366,13 @@ describe("staff.invite errors in §14 order", () => {
     const pending = freshEmail();
     expect((await invite(s.headers, { email: pending, role: "groomer", branchIds: [s.branchIds[0]!] })).statusCode).toBe(201);
     mail.sent.length = 0;
-    const before = await invitationsOf(infra, s.orgId);
+    const before = await snapshot(s.orgId);
     await expectError(
       await invite(s.headers, { email: freshEmail(), role: "groomer", branchIds: [s.branchIds[0]!] }),
       402,
       "PLAN_LIMIT_REACHED",
     );
-    expect(await invitationsOf(infra, s.orgId)).toEqual(before);
-    expect(mail.sent).toEqual([]);
+    await expectNothingWritten(s.orgId, before);
     expect((await invite(s.headers, { email: pending, role: "caretaker", branchIds: [s.branchIds[1]!] })).statusCode).toBe(201);
   });
 
@@ -349,9 +387,10 @@ describe("failures, concurrency and logs", () => {
   it("fails closed with INTERNAL when the organization has no subscription", async () => {
     const s = await seedOrg(app, infra, { role: "owner", branches: ["A"] });
     const email = freshEmail();
+    const before = await snapshot(s.orgId);
     const res = await invite(s.headers, { email, role: "groomer", branchIds: s.branchIds });
     await expectError(res, 500, "INTERNAL");
-    await expectNothingWritten(s.orgId);
+    await expectNothingWritten(s.orgId, before);
     expect(captured()).not.toContain(email);
   });
 
@@ -365,16 +404,15 @@ describe("failures, concurrency and logs", () => {
       invitedByUserId: s.userId,
       expiresAt: new Date(EXPIRES),
     });
-    const before = await invitationsOf(infra, s.orgId);
+    const before = await snapshot(s.orgId);
     fail.audit = true;
     try {
       await expectError(await invite(s.headers, { email, role: "groomer", branchIds: [s.branchIds[0]!] }), 500, "INTERNAL");
     } finally {
       fail.audit = false;
     }
-    expect(await invitationsOf(infra, s.orgId)).toEqual(before);
-    expect(before.find((r) => r.id === old)).toMatchObject({ revokedAt: null });
-    await expectNothingWritten(s.orgId, 1);
+    expect(before.invitations.find((r) => r.id === old)).toMatchObject({ revokedAt: null });
+    await expectNothingWritten(s.orgId, before);
     expect(captured()).toContain("unexpected error");
     expect(captured()).not.toContain(email);
   });
@@ -382,6 +420,7 @@ describe("failures, concurrency and logs", () => {
   it("a failing query → INTERNAL with the unexpected-error log line, but neither the address nor the query params are logged", async () => {
     const s = await shop();
     const email = freshEmail();
+    const before = await snapshot(s.orgId);
     fail.query = true;
     let res: Awaited<ReturnType<typeof invite>>;
     try {
@@ -390,7 +429,7 @@ describe("failures, concurrency and logs", () => {
       fail.query = false;
     }
     await expectError(res, 500, "INTERNAL");
-    await expectNothingWritten(s.orgId);
+    await expectNothingWritten(s.orgId, before);
     const reqId = res.headers["x-request-id"];
     expect(logs.map((l) => JSON.parse(l) as Record<string, unknown>).some((l) => l.msg === "unexpected error" && l.reqId === reqId)).toBe(
       true,
