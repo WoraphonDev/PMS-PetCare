@@ -75,6 +75,17 @@ describe("staff.invitation.revoke", () => {
     expect(listed.invitations).toEqual([]);
   });
 
+  it("frees the seat: at max_staff an invite is PLAN_LIMIT_REACHED, after revoking one it succeeds", async () => {
+    const s = await seedOrg(app, infra, { role: "owner", branches: ["A"] });
+    await seedStaffPlan(infra, s.orgId, 2);
+    const id = await pending(s);
+    const invite = () =>
+      call(app, "POST", "/staff/invitations", s.headers, { email: `${randomUUID()}@example.com`, role: "groomer", branchIds: s.branchIds });
+    await expectError(await invite(), 402, "PLAN_LIMIT_REACHED");
+    expect((await revoke(s.headers, id)).statusCode).toBe(204);
+    expect((await invite()).statusCode).toBe(201);
+  });
+
   it("lets a manager revoke a branch-role invitation", async () => {
     const s = await shop("manager");
     expect((await revoke(s.headers, await pending(s))).statusCode).toBe(204);
