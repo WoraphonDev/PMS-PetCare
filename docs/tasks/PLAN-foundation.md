@@ -38,6 +38,7 @@ T-0008 กับ T-0009 ทำขนานกันได้
 | [T-0039](T-0039.md) | per-test timeouts for multi-step 2FA tests (CI flake on main, T-0013-02); test only — merge before T-0013 | |
 | [T-0013](T-0013.md) | `branch.hours.put`, `branch.closure.*`; proposed §12 contracts/card — human merge before implementation | |
 | [T-0040](T-0040.md) | DELETE bodies without Content-Type reach the route (T-0013-01); depends T-0013 | |
+| [T-0041](T-0041.md) | test DB teardown waits for pool clients to close (CI `57P01` unhandled-error flake); test only | |
 | T-0014 | `branch.paymentSettings.update` (F08) | ✓ |
 | T-0015 | `staff.list`, `staff.invite`, `staff.invitation.revoke`, `invitation.accept` (F03) | |
 | T-0016 | `staff.account.create`, `staff.password.reset` (F09) | |
