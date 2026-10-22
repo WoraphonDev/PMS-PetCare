@@ -456,6 +456,7 @@ resend: 3 schema-valid attempts / 3600s / normalized email **และ** 10 / 36
 
 บัญชี real-email ที่ emailVerified=false (รวมข้อมูลเก่า) login ทั้ง email และ username → UNAUTHENTICATED ตาม failure counter เดิม ไม่มี session/cookie; ขอ resend เพื่อ verify ได้ ไม่มี mass auto-verification
 บัญชี isManaged=true ยกเว้น real-email verification เท่านั้น ยังคง F09 active owning membership, must-change-password และ F10 2FA; ห้ามส่ง email ไป managed.invalid ทุกกรณี ไม่ใช้ suffix เพียงอย่างเดียวเป็นหลักฐานให้ bypass
+บัญชี isManaged=true login ด้วย **username เท่านั้น** (T-0016-05 A, อนุมัติโดยมนุษย์ 2026-10-23): identifier แบบ email (มี `@`) ที่ชี้ไปยังบัญชี managed — รวม `<user_id>@managed.invalid` — ถูกปฏิเสธเหมือนรหัสผ่านผิด: hash รหัสผ่านที่ส่งมาเหมือนเดิม, บันทึก failure counter, ตอบ `UNAUTHENTICATED`, ไม่มี session/cookie; ตัดสินจาก `is_managed` ของบัญชี ไม่ใช่จาก suffix
 ห้ามเปิด global requireEmailVerification โดยไม่ implement managed exception หรือ set managed.emailVerified=true เพื่อหลอกว่า verify จริง; app-level guard ต้องไม่ส่ง session ก่อนตรวจ policy และทดสอบทั้ง identifier modes
 CLOCK ใช้กับ application timestamps/limiter-facing time; อนุญาตเฉพาะ pinned Better Auth internal signup/verification Date ที่ไม่มี injection API; production ห้าม override global Date, isolated tests restore Date/fake timers เสมอ
 
@@ -749,7 +750,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 ## 15. Managed staff accounts contract (T-0016)
 
-สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0016-01 (A), T-0016-02 (A), T-0016-03 (A), T-0016-04 (A) บันทึกในไฟล์ `docs/questions/T-0016-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น; ห้ามเริ่ม implementation ก่อน merge. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0016-01 (A), T-0016-02 (A), T-0016-03 (A), T-0016-04 (A), T-0016-05 (A) บันทึกในไฟล์ `docs/questions/T-0016-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น; ห้ามเริ่ม implementation ก่อน merge. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
 
 <a id="rule-managed-account-roles"></a>
 ### Role ของบัญชี managed
@@ -762,7 +763,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 - module `identity` มี public function ที่รันบน **tenant transaction เดียวกับ org** และเป็นผู้เขียนตาราง identity ทั้งหมด (ADR-0002; org ห้ามเขียนตาราง identity เอง)
 - สร้าง user id เอง แล้ว insert `user`: `name` = displayName, `email = <user_id>@managed.invalid`, `username`, `email_verified = false`, `is_managed = true`, `managed_by_org_id` = org, `must_change_password = true`; และ `account` (`provider_id 'credential'`, `account_id` = user id) ที่ password hash ด้วย hasher เดียวกับ Better Auth (login ด้วย username ทำงานตามเดิม)
 - ไม่สร้าง session, ไม่ส่งอีเมล, ห้ามตั้ง `email_verified = true`; ล้มเหลวที่ใด rollback ทั้งบัญชี membership และ audit
-- **ยังไม่ตัดสิน (รอมนุษย์ — `docs/questions/T-0016-05.md`):** login ด้วย `<user_id>@managed.invalid` ถูกปฏิเสธหรือไม่. จนกว่าจะตอบ: §15 ไม่เปลี่ยน login / `PasswordChangeGuard` และไม่กำหนดผลลัพธ์ของกรณีนี้
+- login ด้วย `<user_id>@managed.invalid` (หรือ email ใดที่ชี้ไปยังบัญชี managed) → ปฏิเสธตาม #rule-email-login-policy (T-0016-05 A); `PasswordChangeGuard` ไม่เปลี่ยน
 
 <a id="contract-staff-account-create"></a>
 ### `staff.account.create`
