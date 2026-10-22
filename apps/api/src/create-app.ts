@@ -101,6 +101,9 @@ export async function createApp(
   const fastify = app.getHttpAdapter().getInstance();
   fastify.addHook("onRequest", async (req, reply) => {
     reply.header("x-request-id", req.id);
+    // T-0013-01: Fastify has no parser for a DELETE body without content-type and rejects it before routing. Read it as
+    // text/plain (buffered within bodyLimit; zero bytes → "") so the route's no-body rule decides. POST/PUT/PATCH keep theirs.
+    if (req.method === "DELETE" && req.headers["content-type"] === undefined) req.headers["content-type"] = "text/plain";
     const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
     if (isForbiddenOrigin(req.method, origin, [config.APP_ORIGIN])) {
       const { status, body } = toErrorResponse(new AppError("FORBIDDEN", "Origin not allowed"), () => undefined);

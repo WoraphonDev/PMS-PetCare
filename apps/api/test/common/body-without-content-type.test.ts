@@ -72,11 +72,12 @@ describe("DELETE body without content-type reaches the route", () => {
   it("a body over bodyLimit is rejected as on main (413 → VALIDATION_FAILED without details), nothing deleted", async () => {
     const s = await seeded();
     const big = "x".repeat(1024 * 1024 + 1);
-    for (const extra of [{ "content-length": String(big.length) }, { "transfer-encoding": "chunked" }]) {
-      const payload = extra["transfer-encoding"] ? Readable.from([big.slice(0, 1024 * 1024), big.slice(1024 * 1024)]) : big;
+    for (const chunked of [false, true]) {
+      const extra: Record<string, string> = chunked ? { "transfer-encoding": "chunked" } : { "content-length": String(big.length) };
+      const payload = chunked ? Readable.from([big.slice(0, 1024 * 1024), big.slice(1024 * 1024)]) : big;
       const res = await raw("DELETE", s.url, withoutContentType(s.headers, extra), payload);
-      expect(res.statusCode, JSON.stringify(Object.keys(extra))).toBe(400);
-      expect(res.json(), JSON.stringify(Object.keys(extra))).toStrictEqual(REJECTED);
+      expect(res.statusCode, `chunked=${chunked}`).toBe(400);
+      expect(res.json(), `chunked=${chunked}`).toStrictEqual(REJECTED);
     }
     expect(await closuresOf(infra, s.orgId)).toHaveLength(1);
   });
