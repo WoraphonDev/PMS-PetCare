@@ -56,12 +56,53 @@ export async function lockMemberships(tx: Tx, userIds: readonly string[]): Promi
   return rows;
 }
 
+type MembershipRow = { id: string; userId: string; role: Role; status: string; displayName: string; createdAt: Date };
+
 /** Locks one membership of this organization (RLS hides the others); undefined when absent. */
-export async function lockMembership(tx: Tx, id: string): Promise<{ id: string; userId: string; role: Role; status: string } | undefined> {
-  const { rows } = await transactionQuery(tx)<{ id: string; user_id: string; role: Role; status: string }>`
-    SELECT id, user_id, role, status FROM membership WHERE id = ${id} FOR UPDATE`;
-  const [row] = rows;
-  return row && { id: row.id, userId: row.user_id, role: row.role, status: row.status };
+export async function lockMembership(tx: Tx, id: string): Promise<MembershipRow | undefined> {
+  const { rows } = await transactionQuery(tx)<{ id: string }>`SELECT id FROM membership WHERE id = ${id} FOR UPDATE`;
+  return rows.length === 0 ? undefined : readMembership(tx, id);
+}
+
+/** One membership of this organization without a lock (#rule-staff-caller-recheck reads under the subscription lock). */
+export async function readMembership(tx: Tx, id: string): Promise<MembershipRow | undefined> {
+  return tx.query.membership.findFirst({
+    columns: { id: true, userId: true, role: true, status: true, displayName: true, createdAt: true },
+    where: (m, { eq }) => eq(m.id, id),
+  });
+}
+
+export async function membershipBranchIds(tx: Tx, membershipId: string): Promise<string[]> {
+  const rows = await tx.query.membershipBranch.findMany({
+    columns: { branchId: true },
+    where: (mb, { eq }) => eq(mb.membershipId, membershipId),
+  });
+  return rows.map((r) => r.branchId).sort();
+}
+
+/** F01 — counted while holding the subscription lock, which every role/status writer takes first. */
+export async function countActiveOwners(tx: Tx): Promise<number> {
+  const { rows } = await transactionQuery(tx)<{ n: number }>`
+    SELECT count(*)::int AS n FROM membership WHERE status = 'active' AND role = 'owner'`;
+  return rows[0]?.n ?? 0;
+}
+
+export async function updateMembership(
+  tx: Tx,
+  change: { orgId: string; id: string; role: Role; displayName: string; branchIds?: readonly string[] },
+  now: Date,
+): Promise<void> {
+  await transactionQuery(tx)`
+    UPDATE membership SET role = ${change.role}, display_name = ${change.displayName}, updated_at = ${now} WHERE id = ${change.id}`;
+  if (!change.branchIds) return;
+  await transactionQuery(tx)`DELETE FROM membership_branch WHERE membership_id = ${change.id}`;
+  for (const branchId of change.branchIds)
+    await tx.insert(membershipBranch).values({ orgId: change.orgId, membershipId: change.id, branchId, createdAt: now });
+}
+
+/** #contract-staff-remove: branch rows stay as history. */
+export async function removeMembership(tx: Tx, id: string, now: Date): Promise<void> {
+  await transactionQuery(tx)`UPDATE membership SET status = 'removed', updated_at = ${now} WHERE id = ${id}`;
 }
 
 /** Branch ids of this organization among `ids` (RLS hides other organizations' branches — F07). */
