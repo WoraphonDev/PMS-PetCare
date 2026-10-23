@@ -47,7 +47,14 @@ export { type AuthedRequest, AuthGuard } from "./auth.guard";
 export { BACKGROUND, BackgroundWork } from "./background";
 export type { UserRow } from "./identity.repository";
 export { createEmailVerificationRepository } from "./identity.repository";
-export { createManagedAccount, hashPassword, managedOwnerOf, setManagedPassword, usernameTaken } from "./managed-account";
+export {
+  createManagedAccount,
+  deleteAllSessions,
+  hashPassword,
+  managedOwnerOf,
+  setManagedPassword,
+  usernameTaken,
+} from "./managed-account";
 export {
   FailureLimiter,
   RESEND_LIMITER,

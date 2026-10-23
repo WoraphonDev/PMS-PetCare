@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { organization, withTenant } from "@app/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb, type TestDb } from "../../../../packages/db/test/support/test-db";
-import { createManagedAccount, hashPassword, managedOwnerOf, setManagedPassword, usernameTaken } from "../../src/modules/identity";
+import {
+  createManagedAccount,
+  deleteAllSessions,
+  hashPassword,
+  managedOwnerOf,
+  setManagedPassword,
+  usernameTaken,
+} from "../../src/modules/identity";
 import { type Auth, createAuth } from "../../src/modules/identity/auth";
 import { FakeEmailSender } from "../../src/modules/notification/email";
 import { testConfig } from "../support/app";
@@ -159,6 +166,39 @@ describe("setManagedPassword", () => {
       }),
     ).rejects.toThrow("caller failed");
     expect(await identityOf(userId)).toEqual(before);
+    expect(await twoFactorMarkersOf(userId)).toHaveLength(1);
+  });
+});
+
+describe("deleteAllSessions", () => {
+  it("deletes every session and 2FA marker of that account only, and nothing else of it (T-0017 remove)", async () => {
+    const userId = await create(freshUsername(), "correct-horse-1");
+    await addSession(userId);
+    await addSession(userId);
+    const other = await create();
+    const otherSession = await addSession(other);
+    const before = await identityOf(userId);
+
+    await onTenant((tx) => deleteAllSessions(tx, userId));
+
+    const after = await identityOf(userId);
+    expect(after.sessions).toEqual([]);
+    expect(await twoFactorMarkersOf(userId)).toEqual([]);
+    expect({ user: after.user, accounts: after.accounts }).toEqual({ user: before.user, accounts: before.accounts });
+    expect((await identityOf(other)).sessions.map((s) => s.id)).toEqual([otherSession]);
+    expect(await twoFactorMarkersOf(other)).toHaveLength(1);
+  });
+
+  it("changes nothing when the caller's transaction rolls back", async () => {
+    const userId = await create();
+    await addSession(userId);
+    await expect(
+      onTenant(async (tx) => {
+        await deleteAllSessions(tx, userId);
+        throw new Error("caller failed");
+      }),
+    ).rejects.toThrow("caller failed");
+    expect((await identityOf(userId)).sessions).toHaveLength(1);
     expect(await twoFactorMarkersOf(userId)).toHaveLength(1);
   });
 });

@@ -5,6 +5,8 @@ import {
   STAFF_INVITATION_REVOKE_STATUS,
   STAFF_INVITE_STATUS,
   STAFF_PASSWORD_RESET_STATUS,
+  STAFF_REMOVE_STATUS,
+  STAFF_UPDATE_STATUS,
   StaffAccountCreateRequest,
   StaffInvitationParams,
   StaffInviteRequest,
@@ -12,8 +14,9 @@ import {
   type StaffMember,
   StaffMembershipParams,
   StaffPasswordResetRequest,
+  StaffUpdateRequest,
 } from "@app/contracts";
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query, Req } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Put, Query, Req } from "@nestjs/common";
 import { CONFIG, type OrgRequestContext } from "../../common/context";
 import { OrgScoped, RequirePermission } from "../../common/tenant.guard";
 import type { Config } from "../../config";
@@ -26,6 +29,8 @@ import { staffInvitationRevoke } from "./use-cases/staff.invitation.revoke";
 import { staffInvite } from "./use-cases/staff.invite";
 import { staffList } from "./use-cases/staff.list";
 import { staffPasswordReset } from "./use-cases/staff.password.reset";
+import { staffRemove } from "./use-cases/staff.remove";
+import { staffUpdate } from "./use-cases/staff.update";
 
 interface Request extends NoBodyRequest {
   ctx: OrgRequestContext;
@@ -83,5 +88,29 @@ export class StaffController {
     @Body(new OrgBody(StaffPasswordResetRequest)) body: StaffPasswordResetRequest,
   ): Promise<void> {
     return staffPasswordReset(req.ctx, params.membershipId.toLowerCase(), body, this.auth);
+  }
+
+  @Patch("staff/:membershipId")
+  @HttpCode(STAFF_UPDATE_STATUS)
+  @RequirePermission("staff.update")
+  update(
+    @Req() req: Request,
+    @Param(new OrgBody(StaffMembershipParams)) params: StaffMembershipParams,
+    @Body(new OrgBody(StaffUpdateRequest)) body: StaffUpdateRequest,
+  ): Promise<StaffMember> {
+    return staffUpdate(req.ctx, params.membershipId.toLowerCase(), body);
+  }
+
+  // DELETE body/query rules of #contract-branch-schedule-common (#contract-staff-remove).
+  @Delete("staff/:membershipId")
+  @HttpCode(STAFF_REMOVE_STATUS)
+  @RequirePermission("staff.remove")
+  async remove(
+    @Req() req: Request,
+    @Param(new OrgBody(StaffMembershipParams)) params: StaffMembershipParams,
+    @Query(new OrgBody(ScheduleQuery)) _query: unknown,
+  ): Promise<void> {
+    await assertNoBody(req);
+    return staffRemove(req.ctx, params.membershipId.toLowerCase());
   }
 }

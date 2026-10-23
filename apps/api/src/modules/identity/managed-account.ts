@@ -62,6 +62,12 @@ export async function setManagedPassword(tx: Tx, input: { userId: string; passwo
   await q`UPDATE account SET password = ${input.passwordHash}, updated_at = ${input.now}
            WHERE user_id = ${input.userId} AND provider_id = 'credential'`;
   await q`UPDATE "user" SET must_change_password = true, updated_at = ${input.now} WHERE id = ${input.userId}`;
-  await q`DELETE FROM verification WHERE value = ${input.userId} AND identifier LIKE '2fa-session:%'`;
-  await q`DELETE FROM session WHERE user_id = ${input.userId}`;
+  await deleteAllSessions(tx, input.userId);
+}
+
+/** Signs one account out everywhere: every session and its 2FA marker (T-0016-03 reset, T-0017-02 managed removal). */
+export async function deleteAllSessions(tx: Tx, userId: string): Promise<void> {
+  const q = transactionQuery(tx);
+  await q`DELETE FROM verification WHERE value = ${userId} AND identifier LIKE '2fa-session:%'`;
+  await q`DELETE FROM session WHERE user_id = ${userId}`;
 }

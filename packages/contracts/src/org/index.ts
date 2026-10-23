@@ -14,3 +14,5 @@ export { STAFF_INVITATION_REVOKE_STATUS, StaffInvitationParams } from "./staff.i
 export { Invitation, STAFF_INVITE_STATUS, StaffInviteRequest } from "./staff.invite";
 export { PendingInvitation, StaffListResponse, StaffMember } from "./staff.list";
 export { STAFF_PASSWORD_RESET_STATUS, StaffMembershipParams, StaffPasswordResetRequest } from "./staff.password.reset";
+export { STAFF_REMOVE_STATUS } from "./staff.remove";
+export { STAFF_UPDATE_STATUS, StaffUpdateRequest } from "./staff.update";
