@@ -847,13 +847,13 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 ## 17. Audit list and subscription read contract (T-0018)
 
-สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0018-01 (B), T-0018-02 (A), T-0018-03 (A) บันทึกในไฟล์ `docs/questions/T-0018-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม index หนึ่งตัวบน `audit_log` (migration ที่ generate); ไม่เพิ่ม error code, permission หรือ audit action
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0018-01 (B), T-0018-02 (A), T-0018-03 (A), T-0018-04 (A), T-0018-05 (A) บันทึกในไฟล์ `docs/questions/T-0018-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม index หนึ่งตัวบน `audit_log` (migration ที่ generate); ไม่เพิ่ม error code, permission หรือ audit action
 
 <a id="contract-audit-list"></a>
 ### `audit.list`
 
 - `GET /audit-logs` · `audit.read` (owner) · query key ได้เฉพาะ `from`, `to`, `action`, `actorUserId`, `cursor` (key อื่น → `VALIDATION_FAILED`)
-  - `from`, `to`: ISO instant (UTC); `from` รวม, `to` ไม่รวม; ต้อง `from < to` และห่างกันไม่เกิน 366 วัน
+  - `from`, `to`: ISO instant (UTC); `from` รวม, `to` ไม่รวม; ไม่บังคับทั้งคู่ ส่งตัวเดียวได้ (T-0018-04 A); เมื่อส่งครบสองตัวต้อง `from < to` และห่างกันไม่เกิน 366 วัน (เทียบความละเอียดระดับ microsecond เหมือน `timestamptz`)
   - `action`: ต้องเป็นหนึ่งใน §6
   - `actorUserId`: UUID (ไม่ตรงกับใคร → หน้าว่าง ไม่ใช่ `NOT_FOUND`)
   - `cursor`: string ทึบจากหน้าก่อน; ผิดรูปแบบหรือถูกแก้ → `VALIDATION_FAILED`
