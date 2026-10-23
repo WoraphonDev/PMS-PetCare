@@ -71,6 +71,13 @@
       "when": 1792598738804,
       "tag": "0009_branch_version",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792775382648,
+      "tag": "0010_audit_log_list_index",
+      "breakpoints": true
     }
   ]
 }

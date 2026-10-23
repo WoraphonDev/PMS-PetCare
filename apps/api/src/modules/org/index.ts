@@ -4,3 +4,4 @@ export {
   type BootstrapOrganizationResult,
   bootstrapOrganization,
 } from "./bootstrap";
+export { branchCount, memberNames, staffSeats } from "./public-reads";
