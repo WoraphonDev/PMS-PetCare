@@ -130,11 +130,13 @@ it("managed.invalid alone grants no exemption in either login mode", async () =>
   expect(mail.sent).toHaveLength(before);
 });
 
-it("isManaged alone grants the verification exemption, retaining must-change and active owning membership in both modes", async () => {
-  // Real-looking address proves the exemption depends on the flag, not the suffix.
+it("isManaged alone grants the verification exemption, retaining must-change and active owning membership; email login is refused", async () => {
+  // Real-looking address proves both rules depend on the flag, not the suffix.
   const f = await fixture({ managed: true });
   const before = mail.sent.length;
-  for (const identifier of [f.email, f.username]) {
+  // T-0016-05 (#rule-email-login-policy): managed accounts log in by username only.
+  denied(await login(f.email));
+  for (const identifier of [f.username]) {
     const good = await login(identifier);
     expect(good.statusCode).toBe(200);
     expect(good.json()).toEqual({ twoFactorRequired: false, mustChangePassword: true });

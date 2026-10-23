@@ -35,10 +35,12 @@ export async function authLogin(
 
   const u = await findUserByIdentifier(deps.platformDb, identifier);
   // Deny unverified real-email and disabled managed accounts before Better Auth can create any session/cookie.
-  // Only isManaged grants the verification exemption; owning membership (F09) still applies.
+  // Only isManaged grants the verification exemption; owning membership (F09) still applies. Managed accounts log in
+  // by username only (T-0016-05): an email identifier, incl. the `<id>@managed.invalid` placeholder, fails like a wrong password.
   // Hash the presented password so policy failures do password work like wrong-password failures.
   // Unknown identifiers go through Better Auth's sign-in, which already runs a dummy hash for missing accounts.
-  if (u && ((!u.isManaged && !u.emailVerified) || !(await isManagedAccountActive(deps.platformDb, u)))) {
+  const refused = u && (u.isManaged ? identifier.includes("@") : !u.emailVerified);
+  if (u && (refused || !(await isManagedAccountActive(deps.platformDb, u)))) {
     await (await deps.auth.$context).password.hash(input.password);
     throw await fail();
   }
