@@ -805,7 +805,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 ## 16. Staff update and remove contract (T-0017)
 
-สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0017-01 (A), T-0017-02 (A), T-0017-03 (A) บันทึกในไฟล์ `docs/questions/T-0017-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. #rule-staff-caller-recheck และตำแหน่งของมันในลำดับ error ด้านล่าง **อนุมัติโดยมนุษย์ในแชท 2026-10-23** (หลัง review) — ขยายจาก #rule-staff-check-and-lock ไม่เพิ่ม code ใหม่. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0017-01 (A), T-0017-02 (A), T-0017-03 (A), T-0017-04 (A) บันทึกในไฟล์ `docs/questions/T-0017-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. #rule-staff-caller-recheck และตำแหน่งของมันในลำดับ error ด้านล่าง **อนุมัติโดยมนุษย์ในแชท 2026-10-23** (หลัง review) — ขยายจาก #rule-staff-check-and-lock ไม่เพิ่ม code ใหม่. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
 
 <a id="rule-staff-caller-recheck"></a>
 ### ตรวจผู้เรียกซ้ำใน phase 2
@@ -826,7 +826,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
   2. id/body ผิด → `VALIDATION_FAILED`
   3. phase 2 (#rule-staff-check-and-lock): lock subscription (ไม่มี → `INTERNAL`), อ่าน `organization.status` ซ้ำ → `ORG_SUSPENDED`, ตรวจผู้เรียกซ้ำ (#rule-staff-caller-recheck) → `FORBIDDEN`, lock membership เป้าหมาย — ไม่พบ, org อื่น หรือ `removed` → `NOT_FOUND`
   4. ผู้เรียก (role ปัจจุบันจากข้อ 3) เป็น manager และ (เป้าหมายเป็น owner/manager หรือ role ใหม่เป็น owner/manager) → `FORBIDDEN` (รวม membership ของตัวเอง)
-  5. role ระดับสาขาโดยไม่มีสาขา → `BRANCH_REQUIRED`; branch id ไม่อยู่ใน tenant → `NOT_FOUND`
+  5. เป้าหมายเป็น/ยังคงเป็น owner/manager แต่ส่ง `branchIds` ไม่ว่าง (ไม่ได้ส่ง `role`) → `VALIDATION_FAILED` ที่ `details.fields.branchIds` (T-0017-04 A); role ระดับสาขาโดยไม่มีสาขา → `BRANCH_REQUIRED`; branch id ไม่อยู่ใน tenant → `NOT_FOUND`
   6. ลด role ของ owner `active` คนสุดท้าย (รวมตัวเอง) → `LAST_OWNER` (F01; นับภายใต้ lock ข้อ 3)
   7. #rule-managed-account-roles
 - ทุกค่าเท่าเดิม → 200 `StaffMember` ไม่เขียนอะไร
