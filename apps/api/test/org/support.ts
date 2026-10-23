@@ -53,7 +53,8 @@ export async function outboxOf(infra: TestInfra, orgId: string) {
 export async function auditOf(infra: TestInfra, orgId: string) {
   return infra.platformDb.query.auditLog.findMany({
     where: (a, { eq }) => eq(a.orgId, orgId),
-    orderBy: (a, { asc }) => [asc(a.occurredAt)],
+    // T-0018-05: ties on a mocked occurred_at are ordered by insertion (created_at), then id — never by plan choice.
+    orderBy: (a, { asc }) => [asc(a.occurredAt), asc(a.createdAt), asc(a.id)],
   });
 }
 export async function branchesOf(infra: TestInfra, orgId: string) {
