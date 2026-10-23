@@ -25,16 +25,18 @@ export const AuditAction = z.enum(AUDIT_ACTIONS);
 /**
  * ISO instant with an offset, kept as sent: Postgres compares it as `timestamptz` (microseconds), so a JS Date
  * (milliseconds) must not round it. `micros` reads it with the same precision for the range checks below, and is null
- * for a calendar-impossible instant (month 13, 30 February, 24:00) that Postgres would refuse.
+ * for an instant Postgres would refuse (month 13, 30 February, 24:00, year 0000, offset +16:00).
  */
-const INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})$/;
+const INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-](\d{2}):?(\d{2}))$/;
 function micros(instant: string): bigint | null {
   const m = INSTANT.exec(instant);
   if (!m) return null;
-  const [, y, mo, d, h, mi, sec, fraction = "", zone] = m;
+  const [, y, mo, d, h, mi, sec, fraction = "", zone, zh = "0", zm = "0"] = m;
   const [year, month, day] = [Number(y), Number(mo), Number(d)];
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   if (month < 1 || month > 12 || day < 1 || day > daysInMonth || Number(h) > 23 || Number(mi) > 59 || Number(sec) > 59) return null;
+  // Postgres refuses year 0000 and offsets beyond ±15:59 (checked against Postgres 17).
+  if (year < 1 || Number(zh) > 15 || Number(zm) > 59) return null;
   const whole = Date.parse(`${y}-${mo}-${d}T${h}:${mi}:${sec}${zone}`);
   if (Number.isNaN(whole)) return null;
   const digits = `${fraction}0000000`.slice(0, 7);

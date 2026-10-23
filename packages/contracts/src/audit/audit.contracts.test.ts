@@ -24,11 +24,25 @@ describe("AuditListQuery", () => {
       "2030-02-29T00:00:00Z",
       "2031-05-06T24:00:00Z",
       "2031-05-06T00:60:00Z",
+      // Rejected by Postgres 17 (checked): year 0000, offsets of 16 hours or more, offset minutes of 60.
+      "0000-01-01T00:00:00Z",
+      "2031-05-06T00:00:00+16:00",
+      "2031-05-06T00:00:00-1600",
+      "2031-05-06T00:00:00+07:60",
     ]) {
       expect(fieldsOf(AuditListQuery.safeParse({ from: bad, to: "2032-01-01T00:00:00Z" })), bad).toEqual(["from"]);
       expect(fieldsOf(AuditListQuery.safeParse({ from: "2031-01-01T00:00:00Z", to: bad })), bad).toEqual(["to"]);
     }
-    expect(AuditListQuery.safeParse({ from: "2032-02-29T00:00:00Z" }).success).toBe(true);
+    // The edges Postgres accepts: years 0001–9999, offsets up to ±15:59.
+    for (const ok of [
+      "2032-02-29T00:00:00Z",
+      "0001-01-01T00:00:00Z",
+      "9999-12-31T23:59:59.999999Z",
+      "2031-05-06T00:00:00+15:59",
+      "2031-05-06T00:00:00-1559",
+      "2031-05-06T00:00:00+0730",
+    ])
+      expect(AuditListQuery.safeParse({ from: ok }).success, ok).toBe(true);
   });
 
   it("compares from/to at microsecond precision, like Postgres (no millisecond rounding)", () => {
