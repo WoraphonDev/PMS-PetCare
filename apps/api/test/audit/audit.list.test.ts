@@ -243,6 +243,9 @@ describe("errors", () => {
       ["?action=staff.removed&action=org.updated", "action"],
       ["?actorUserId=x", "actorUserId"],
       ["?cursor=", "cursor"],
+      ["?from=2031-13-06T00:00:00Z&to=2032-01-01T00:00:00Z", "from"],
+      ["?from=2031-01-01T00:00:00Z&to=2031-02-30T00:00:00Z", "to"],
+      ["?from=2031-04-31T00:00:00Z", "from"],
       ["?page=2", "page"],
     ] as const) {
       const error = await expectError(await list(s.headers, query), 400, "VALIDATION_FAILED");

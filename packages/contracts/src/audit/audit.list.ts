@@ -24,18 +24,25 @@ export const AuditAction = z.enum(AUDIT_ACTIONS);
 
 /**
  * ISO instant with an offset, kept as sent: Postgres compares it as `timestamptz` (microseconds), so a JS Date
- * (milliseconds) must not round it. `micros` reads it with the same precision for the range checks below.
+ * (milliseconds) must not round it. `micros` reads it with the same precision for the range checks below, and is null
+ * for a calendar-impossible instant (month 13, 30 February, 24:00) that Postgres would refuse.
  */
-const Instant = z.iso.datetime({ offset: true });
-function micros(instant: string): bigint {
-  const match = /^(.*T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(.*)$/.exec(instant);
-  if (!match) return 0n;
-  const [, head, fraction = "", zone] = match;
-  const whole = BigInt(Date.parse(`${head}${zone}`)) * 1000n;
+const INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})$/;
+function micros(instant: string): bigint | null {
+  const m = INSTANT.exec(instant);
+  if (!m) return null;
+  const [, y, mo, d, h, mi, sec, fraction = "", zone] = m;
+  const [year, month, day] = [Number(y), Number(mo), Number(d)];
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth || Number(h) > 23 || Number(mi) > 59 || Number(sec) > 59) return null;
+  const whole = Date.parse(`${y}-${mo}-${d}T${h}:${mi}:${sec}${zone}`);
+  if (Number.isNaN(whole)) return null;
   const digits = `${fraction}0000000`.slice(0, 7);
   // Postgres rounds to the nearest microsecond.
-  return whole + (BigInt(digits.slice(0, 6)) + (Number(digits[6]) >= 5 ? 1n : 0n));
+  return BigInt(whole) * 1000n + BigInt(digits.slice(0, 6)) + (Number(digits[6]) >= 5 ? 1n : 0n);
 }
+// One check, so a bad value gets one message: the ISO shape (with an offset) and a real calendar instant.
+const Instant = z.string().refine((value) => micros(value) !== null, "Must be an ISO date-time with an offset, e.g. 2031-05-06T07:08:09Z");
 const MAX_SPAN_MICROS = 366n * 24n * 60n * 60n * 1_000_000n;
 
 /**
@@ -52,8 +59,11 @@ export const AuditListQuery = strictBody({
     .optional(),
   cursor: z.string().min(1).max(512).optional(),
 }).superRefine((value, ctx) => {
-  if (!value.from || !value.to) return;
-  const span = micros(value.to) - micros(value.from);
+  // Only when both bounds are real instants; an invalid one is already reported at its own field.
+  const from = value.from === undefined ? null : micros(value.from);
+  const to = value.to === undefined ? null : micros(value.to);
+  if (from === null || to === null) return;
+  const span = to - from;
   if (span <= 0n) ctx.addIssue({ code: "custom", path: ["to"], message: "Must be after from" });
   else if (span > MAX_SPAN_MICROS) ctx.addIssue({ code: "custom", path: ["to"], message: "At most 366 days after from" });
 });

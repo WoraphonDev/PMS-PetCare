@@ -16,6 +16,21 @@ describe("AuditListQuery", () => {
     expect(AuditListQuery.parse({ cursor: "abc.def" })).toEqual({ cursor: "abc.def" });
   });
 
+  it("rejects impossible calendar instants at their own field, even next to a valid bound (no throw)", () => {
+    for (const bad of [
+      "2031-13-06T00:00:00Z",
+      "2031-02-30T00:00:00Z",
+      "2031-04-31T00:00:00Z",
+      "2030-02-29T00:00:00Z",
+      "2031-05-06T24:00:00Z",
+      "2031-05-06T00:60:00Z",
+    ]) {
+      expect(fieldsOf(AuditListQuery.safeParse({ from: bad, to: "2032-01-01T00:00:00Z" })), bad).toEqual(["from"]);
+      expect(fieldsOf(AuditListQuery.safeParse({ from: "2031-01-01T00:00:00Z", to: bad })), bad).toEqual(["to"]);
+    }
+    expect(AuditListQuery.safeParse({ from: "2032-02-29T00:00:00Z" }).success).toBe(true);
+  });
+
   it("compares from/to at microsecond precision, like Postgres (no millisecond rounding)", () => {
     expect(AuditListQuery.safeParse({ from: "2031-05-06T00:00:00.000100Z", to: "2031-05-06T00:00:00.000900Z" }).success).toBe(true);
     expect(AuditListQuery.safeParse({ from: "2031-05-06T07:00:00.0001+07:00", to: "2031-05-06T00:00:00.0002Z" }).success).toBe(true);
