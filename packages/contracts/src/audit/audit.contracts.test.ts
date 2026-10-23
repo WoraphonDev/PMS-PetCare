@@ -9,11 +9,24 @@ const A = "6f1c2a8e-4b7d-4e2a-9c3b-1d2e3f4a5b6c";
 describe("AuditListQuery", () => {
   it("accepts no filter at all, and every filter alone (T-0018-04 A)", () => {
     expect(AuditListQuery.parse({})).toEqual({});
-    expect(AuditListQuery.parse({ from: "2031-05-06T00:00:00Z" })).toEqual({ from: new Date("2031-05-06T00:00:00Z") });
-    expect(AuditListQuery.parse({ to: "2031-05-06T07:00:00.123+07:00" })).toEqual({ to: new Date("2031-05-06T00:00:00.123Z") });
+    expect(AuditListQuery.parse({ from: "2031-05-06T00:00:00Z" })).toEqual({ from: "2031-05-06T00:00:00Z" });
+    expect(AuditListQuery.parse({ to: "2031-05-06T07:00:00.123456+07:00" })).toEqual({ to: "2031-05-06T07:00:00.123456+07:00" });
     expect(AuditListQuery.parse({ action: "staff.removed" })).toEqual({ action: "staff.removed" });
     expect(AuditListQuery.parse({ actorUserId: A.toUpperCase() })).toEqual({ actorUserId: A });
     expect(AuditListQuery.parse({ cursor: "abc.def" })).toEqual({ cursor: "abc.def" });
+  });
+
+  it("compares from/to at microsecond precision, like Postgres (no millisecond rounding)", () => {
+    expect(AuditListQuery.safeParse({ from: "2031-05-06T00:00:00.000100Z", to: "2031-05-06T00:00:00.000900Z" }).success).toBe(true);
+    expect(AuditListQuery.safeParse({ from: "2031-05-06T07:00:00.0001+07:00", to: "2031-05-06T00:00:00.0002Z" }).success).toBe(true);
+    for (const [from, to] of [
+      ["2031-05-06T00:00:00.000500Z", "2031-05-06T00:00:00.0005Z"],
+      ["2031-05-06T00:00:00.0009Z", "2031-05-06T00:00:00.0001Z"],
+      ["2031-05-06T00:00:00.0000001Z", "2031-05-06T00:00:00Z"],
+    ])
+      expect(fieldsOf(AuditListQuery.safeParse({ from, to })), `${from} ${to}`).toEqual(["to"]);
+    // 366 days and one microsecond is too long.
+    expect(fieldsOf(AuditListQuery.safeParse({ from: "2031-01-01T00:00:00Z", to: "2032-01-02T00:00:00.000001Z" }))).toEqual(["to"]);
   });
 
   it("requires from < to and at most 366 days when both are sent", () => {

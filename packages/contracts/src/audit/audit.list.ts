@@ -22,8 +22,21 @@ export const AUDIT_ACTIONS = [
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 
-const Instant = z.iso.datetime({ offset: true }).transform((value) => new Date(value));
-const MAX_SPAN_MS = 366 * 24 * 60 * 60 * 1000;
+/**
+ * ISO instant with an offset, kept as sent: Postgres compares it as `timestamptz` (microseconds), so a JS Date
+ * (milliseconds) must not round it. `micros` reads it with the same precision for the range checks below.
+ */
+const Instant = z.iso.datetime({ offset: true });
+function micros(instant: string): bigint {
+  const match = /^(.*T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(.*)$/.exec(instant);
+  if (!match) return 0n;
+  const [, head, fraction = "", zone] = match;
+  const whole = BigInt(Date.parse(`${head}${zone}`)) * 1000n;
+  const digits = `${fraction}0000000`.slice(0, 7);
+  // Postgres rounds to the nearest microsecond.
+  return whole + (BigInt(digits.slice(0, 6)) + (Number(digits[6]) >= 5 ? 1n : 0n));
+}
+const MAX_SPAN_MICROS = 366n * 24n * 60n * 60n * 1_000_000n;
 
 /**
  * #contract-audit-list (T-0018-01 B): ISO instants, `from` inclusive, `to` exclusive. Every filter is optional and may
@@ -40,9 +53,9 @@ export const AuditListQuery = strictBody({
   cursor: z.string().min(1).max(512).optional(),
 }).superRefine((value, ctx) => {
   if (!value.from || !value.to) return;
-  if (value.from >= value.to) ctx.addIssue({ code: "custom", path: ["to"], message: "Must be after from" });
-  else if (value.to.getTime() - value.from.getTime() > MAX_SPAN_MS)
-    ctx.addIssue({ code: "custom", path: ["to"], message: "At most 366 days after from" });
+  const span = micros(value.to) - micros(value.from);
+  if (span <= 0n) ctx.addIssue({ code: "custom", path: ["to"], message: "Must be after from" });
+  else if (span > MAX_SPAN_MICROS) ctx.addIssue({ code: "custom", path: ["to"], message: "At most 366 days after from" });
 });
 export type AuditListQuery = z.infer<typeof AuditListQuery>;
 

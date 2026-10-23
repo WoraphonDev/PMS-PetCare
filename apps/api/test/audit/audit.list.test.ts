@@ -23,7 +23,7 @@ type Row = {
   orgId: string | null;
   actorUserId?: string | null;
   action?: string;
-  occurredAt: Date;
+  occurredAt: Date | string;
   before?: object | null;
   after?: object | null;
   id?: string;
@@ -168,17 +168,47 @@ describe("filters", () => {
     expect(await ids({ action: "staff.removed", actorUserId: s.userId, from: "2031-05-01T00:00:00Z" })).toEqual([d]);
   });
 
-  it("keeps the filters across pages with the cursor", async () => {
+  it("follows the cursor of a filtered page with the same filters: 60 matching among 100 rows → 50 + 10, exact order", async () => {
     const s = await seedOrg(app, infra, { role: "owner", branches: ["A"] });
-    for (let i = 0; i < 60; i++) {
-      await seedAudit({ orgId: s.orgId, occurredAt: T("2031-05-02T00:00:00Z"), action: i % 2 ? "staff.removed" : "staff.invited" });
+    const matching: Array<{ id: string; at: number }> = [];
+    for (let i = 0; i < 100; i++) {
+      const at = Date.UTC(2031, 4, 2) + (i % 7) * 1000; // equal timestamps within and across both actions
+      const action = i % 5 < 3 ? "staff.removed" : "staff.invited";
+      const id = await seedAudit({ orgId: s.orgId, occurredAt: new Date(at), action });
+      if (action === "staff.removed") matching.push({ id, at });
     }
-    const first = await page(s.headers, q({ action: "staff.removed" }));
-    expect(first.items).toHaveLength(30);
-    expect(first.nextCursor).toBeNull();
-    const all = await page(s.headers);
-    const second = await page(s.headers, q({ cursor: all.nextCursor!, action: "staff.invited" }));
-    expect(second.items.every((i) => i.action === "staff.invited")).toBe(true);
+    const expected = matching.sort((x, y) => y.at - x.at || (x.id < y.id ? 1 : -1)).map((r) => r.id);
+    expect(expected).toHaveLength(60);
+    const filter = { action: "staff.removed", from: "2031-05-01T00:00:00Z" };
+    const first = await page(s.headers, q(filter));
+    expect(first.items).toHaveLength(50);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await page(s.headers, q({ ...filter, cursor: first.nextCursor! }));
+    expect(second.items).toHaveLength(10);
+    expect(second.nextCursor).toBeNull();
+    expect([...first.items, ...second.items].map((i) => i.id)).toEqual(expected);
+    expect([...first.items, ...second.items].every((i) => i.action === "staff.removed")).toBe(true);
+  });
+
+  it("compares from/to at microsecond precision (no millisecond rounding)", async () => {
+    const s = await seedOrg(app, infra, { role: "owner", branches: ["A"] });
+    const at0 = await seedAudit({ orgId: s.orgId, occurredAt: "2031-05-06T00:00:00.000000Z" });
+    const at500 = await seedAudit({ orgId: s.orgId, occurredAt: "2031-05-06T00:00:00.000500Z" });
+    const ids = async (params: Record<string, string>) => (await page(s.headers, q(params))).items.map((i) => i.id);
+    expect(await ids({ to: "2031-05-06T00:00:00.000500Z" })).toEqual([at0]);
+    expect(await ids({ to: "2031-05-06T00:00:00.000501Z" })).toEqual([at500, at0]);
+    expect(await ids({ from: "2031-05-06T00:00:00.000001Z" })).toEqual([at500]);
+    expect(await ids({ from: "2031-05-06T00:00:00.000100Z", to: "2031-05-06T00:00:00.000900Z" })).toEqual([at500]);
+  });
+
+  it("pages rows that differ only in microseconds without skipping or repeating", async () => {
+    const s = await seedOrg(app, infra, { role: "owner", branches: ["A"] });
+    const expected: string[] = [];
+    for (let i = 0; i < 55; i++)
+      expected.unshift(await seedAudit({ orgId: s.orgId, occurredAt: `2031-05-06T00:00:00.000${String(100 + i).padStart(3, "0")}Z` }));
+    const first = await page(s.headers);
+    const second = await page(s.headers, q({ cursor: first.nextCursor! }));
+    expect([...first.items, ...second.items].map((i) => i.id)).toEqual(expected);
   });
 });
 

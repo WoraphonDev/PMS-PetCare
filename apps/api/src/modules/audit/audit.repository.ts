@@ -20,7 +20,14 @@ export interface AuditRow {
  */
 export async function auditPage(
   tx: Tx,
-  filter: { orgId: string; from: Date | null; to: Date | null; action: string | null; actorUserId: string | null; cursor: Position | null },
+  filter: {
+    orgId: string;
+    from: string | null;
+    to: string | null;
+    action: string | null;
+    actorUserId: string | null;
+    cursor: Position | null;
+  },
   limit: number,
 ): Promise<AuditRow[]> {
   const c = filter.cursor;
