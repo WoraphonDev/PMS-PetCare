@@ -805,7 +805,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 ## 16. Staff update and remove contract (T-0017)
 
-สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0017-01 (A), T-0017-02 (A), T-0017-03 (A) บันทึกในไฟล์ `docs/questions/T-0017-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. #rule-staff-caller-recheck และตำแหน่งของมันในลำดับ error ด้านล่าง **อนุมัติโดยมนุษย์ในแชท 2026-10-23** (หลัง review) — ขยายจาก #rule-staff-check-and-lock ไม่เพิ่ม code ใหม่. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0017-01 (A), T-0017-02 (A), T-0017-03 (A), T-0017-04 (A) บันทึกในไฟล์ `docs/questions/T-0017-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. #rule-staff-caller-recheck และตำแหน่งของมันในลำดับ error ด้านล่าง **อนุมัติโดยมนุษย์ในแชท 2026-10-23** (หลัง review) — ขยายจาก #rule-staff-check-and-lock ไม่เพิ่ม code ใหม่. ไม่เพิ่ม error code, permission, audit action, คอลัมน์ หรือ migration
 
 <a id="rule-staff-caller-recheck"></a>
 ### ตรวจผู้เรียกซ้ำใน phase 2
@@ -826,7 +826,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
   2. id/body ผิด → `VALIDATION_FAILED`
   3. phase 2 (#rule-staff-check-and-lock): lock subscription (ไม่มี → `INTERNAL`), อ่าน `organization.status` ซ้ำ → `ORG_SUSPENDED`, ตรวจผู้เรียกซ้ำ (#rule-staff-caller-recheck) → `FORBIDDEN`, lock membership เป้าหมาย — ไม่พบ, org อื่น หรือ `removed` → `NOT_FOUND`
   4. ผู้เรียก (role ปัจจุบันจากข้อ 3) เป็น manager และ (เป้าหมายเป็น owner/manager หรือ role ใหม่เป็น owner/manager) → `FORBIDDEN` (รวม membership ของตัวเอง)
-  5. role ระดับสาขาโดยไม่มีสาขา → `BRANCH_REQUIRED`; branch id ไม่อยู่ใน tenant → `NOT_FOUND`
+  5. เป้าหมายเป็น/ยังคงเป็น owner/manager แต่ส่ง `branchIds` ไม่ว่าง (ไม่ได้ส่ง `role`) → `VALIDATION_FAILED` ที่ `details.fields.branchIds` (T-0017-04 A); role ระดับสาขาโดยไม่มีสาขา → `BRANCH_REQUIRED`; branch id ไม่อยู่ใน tenant → `NOT_FOUND`
   6. ลด role ของ owner `active` คนสุดท้าย (รวมตัวเอง) → `LAST_OWNER` (F01; นับภายใต้ lock ข้อ 3)
   7. #rule-managed-account-roles
 - ทุกค่าเท่าเดิม → 200 `StaffMember` ไม่เขียนอะไร
@@ -847,13 +847,13 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 
 ## 17. Audit list and subscription read contract (T-0018)
 
-สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0018-01 (B), T-0018-02 (A), T-0018-03 (A) บันทึกในไฟล์ `docs/questions/T-0018-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม index หนึ่งตัวบน `audit_log` (migration ที่ generate); ไม่เพิ่ม error code, permission หรือ audit action
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-23** — T-0018-01 (B), T-0018-02 (A), T-0018-03 (A), T-0018-04 (A), T-0018-05 (A) บันทึกในไฟล์ `docs/questions/T-0018-0N.md`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม index หนึ่งตัวบน `audit_log` (migration ที่ generate); ไม่เพิ่ม error code, permission หรือ audit action
 
 <a id="contract-audit-list"></a>
 ### `audit.list`
 
 - `GET /audit-logs` · `audit.read` (owner) · query key ได้เฉพาะ `from`, `to`, `action`, `actorUserId`, `cursor` (key อื่น → `VALIDATION_FAILED`)
-  - `from`, `to`: ISO instant (UTC); `from` รวม, `to` ไม่รวม; ต้อง `from < to` และห่างกันไม่เกิน 366 วัน
+  - `from`, `to`: ISO instant (UTC); `from` รวม, `to` ไม่รวม; ไม่บังคับทั้งคู่ ส่งตัวเดียวได้ (T-0018-04 A); เมื่อส่งครบสองตัวต้อง `from < to` และห่างกันไม่เกิน 366 วัน (เทียบความละเอียดระดับ microsecond เหมือน `timestamptz`)
   - `action`: ต้องเป็นหนึ่งใน §6
   - `actorUserId`: UUID (ไม่ตรงกับใคร → หน้าว่าง ไม่ใช่ `NOT_FOUND`)
   - `cursor`: string ทึบจากหน้าก่อน; ผิดรูปแบบหรือถูกแก้ → `VALIDATION_FAILED`
