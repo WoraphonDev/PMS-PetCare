@@ -74,9 +74,11 @@ async function snapshot(orgId: string, userIds: readonly string[] = []) {
     "select membership_id, branch_id from membership_branch where org_id = $1 order by membership_id, branch_id",
     [orgId],
   );
-  const { rows: sessions } = await infra.platformDb.$client.query("select id, user_id from session where user_id = any($1) order by id", [
-    [...userIds],
-  ]);
+  // Every session row of every member of this org (any status) and of `userIds` — a rejection must not sign anyone out.
+  const { rows: sessions } = await infra.platformDb.$client.query(
+    `select * from session where user_id = any($2) or user_id in (select user_id from membership where org_id = $1) order by id`,
+    [orgId, [...userIds]],
+  );
   const memberships = (await membershipsOf(infra, orgId)).sort((a, b) => (a.id < b.id ? -1 : 1));
   return { memberships, membershipBranches, audit: await auditOf(infra, orgId), sessions };
 }
@@ -219,8 +221,12 @@ describe("staff.update happy paths", () => {
 });
 
 describe("staff.update errors in §16 order", () => {
-  it("applies the org-scoped guard errors", async () => {
-    await expectGuardErrors(app, infra, "PATCH", `/staff/${randomUUID()}`, { displayName: "X" });
+  it("applies the org-scoped guard errors to a real target, which keeps its membership and sessions", async () => {
+    const s = await shop();
+    const m = await member(s.orgId, "groomer", [s.branchIds[0]!]);
+    const before = await snapshot(s.orgId, [m.userId]);
+    await expectGuardErrors(app, infra, "PATCH", `/staff/${m.membershipId}`, { role: "manager" });
+    expect(await snapshot(s.orgId, [m.userId])).toEqual(before);
   });
 
   it("denies roles without staff.update", async () => {
@@ -242,7 +248,7 @@ describe("staff.update errors in §16 order", () => {
   it("rejects a malformed id and invalid bodies with VALIDATION_FAILED", async () => {
     const s = await shop();
     const m = await member(s.orgId, "groomer", [s.branchIds[0]!]);
-    const bad = await expectError(await patch(s.headers, "not-a-uuid", { displayName: "X" }), 400, "VALIDATION_FAILED");
+    const bad = await expectRejected(s.orgId, () => patch(s.headers, "not-a-uuid", { displayName: "X" }), 400, "VALIDATION_FAILED");
     expect(Object.keys((bad.details as { fields: object }).fields)).toContain("membershipId");
     for (const [body, field] of [
       [{}, "_"],
