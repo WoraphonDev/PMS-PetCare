@@ -31,6 +31,28 @@ export async function countSeats(tx: Tx, now: Date, replacingEmail: string): Pro
   return Number(rows[0]?.seats ?? 0);
 }
 
+/**
+ * #contract-subscription-get: the parts of #rule-staff-capacity in one statement (one snapshot), with exactly the
+ * predicates of {@link countSeats}.
+ */
+export async function seatBreakdown(tx: Tx, now: Date): Promise<{ active: number; pendingInvitations: number }> {
+  const { rows } = await transactionQuery(tx)<{ active: number; pending: number }>`
+    SELECT (SELECT count(*) FROM membership WHERE status = 'active')::int AS active,
+           (SELECT count(*) FROM invitation
+             WHERE accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ${now})::int AS pending`;
+  return { active: rows[0]?.active ?? 0, pendingInvitations: rows[0]?.pending ?? 0 };
+}
+
+/** #contract-audit-list: this org's `display_name` per user, active or removed — `(org_id, user_id)` is unique. */
+export async function memberDisplayNames(tx: Tx, userIds: readonly string[]): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await tx.query.membership.findMany({
+    columns: { userId: true, displayName: true },
+    where: (m, { inArray }) => inArray(m.userId, [...userIds]),
+  });
+  return new Map(rows.map((r) => [r.userId, r.displayName]));
+}
+
 /** Lock step 2 for invite: the pending invitations of one email, in id order. */
 export async function lockPendingInvitations(tx: Tx, email: string, now: Date): Promise<Array<{ id: string; role: Role }>> {
   const { rows } = await transactionQuery(tx)<{ id: string; role: Role }>`

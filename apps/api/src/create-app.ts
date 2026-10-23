@@ -10,8 +10,10 @@ import { createInfra, type Infra, InfraLifecycle, PLATFORM_DB, RUNTIME_DB, VALKE
 import { ErrorFilter, toErrorResponse } from "./common/error.filter";
 import { requestIdFrom } from "./common/request-id";
 import type { Config } from "./config";
+import { AuditModule } from "./modules/audit/audit.module";
 import { IdentityModule } from "./modules/identity";
 import { OrgModule } from "./modules/org/org.module";
+import { SubscriptionModule } from "./modules/subscription/subscription.module";
 import { SystemModule } from "./modules/system/system.module";
 
 // Logged objects never carry credentials (AGENTS.md rule 9).
@@ -53,8 +55,10 @@ function rootModule(config: Config, infra: Infra, ownsInfra: boolean, extra: Arr
     // Registry: one module per line, alphabetical (scripts/check-registries.mjs) so parallel cards merge cleanly.
     // biome-ignore format: keep one entry per line
     imports: [
+      AuditModule,
       IdentityModule,
       OrgModule,
+      SubscriptionModule,
       SystemModule,
       ...extra,
     ],
