@@ -14,6 +14,9 @@
       "!**/routeTree.gen.ts"
     ]
   },
+  "css": {
+    "parser": { "tailwindDirectives": true }
+  },
   "formatter": {
     "indentStyle": "space",
     "indentWidth": 2,
