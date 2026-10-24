@@ -22,6 +22,7 @@ export const authEmailVerificationResend = defineEndpoint({
 });
 export const authEmailVerify = defineEndpoint({ method: "POST", path: "/auth/email/verify", response: null, body: AuthEmailVerifyRequest });
 export const authLogin = defineEndpoint({ method: "POST", path: "/auth/login", response: AuthLoginResponse, body: AuthLoginRequest });
+export const authLogout = defineEndpoint({ method: "POST", path: "/auth/logout", response: null });
 export const authPasswordChange = defineEndpoint({
   method: "POST",
   path: "/auth/password/change",
