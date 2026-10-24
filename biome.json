@@ -1,7 +1,18 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "files": {
-    "includes": ["**", "!docs", "!**/migrations", "!**/node_modules", "!**/.next", "!**/.expo", "!**/dist", "!**/.turbo", "!pnpm-lock.yaml"]
+    "includes": [
+      "**",
+      "!docs",
+      "!**/migrations",
+      "!**/node_modules",
+      "!**/.next",
+      "!**/.expo",
+      "!**/dist",
+      "!**/.turbo",
+      "!pnpm-lock.yaml",
+      "!**/routeTree.gen.ts"
+    ]
   },
   "formatter": {
     "indentStyle": "space",
@@ -56,6 +67,122 @@
                   {
                     "group": ["@app/*", "pg/*"],
                     "message": "packages/domain is pure business rules: no internal packages and no I/O (ADR-0002)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/*-web/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "pg": "Web apps run in the browser: no database or server code (ADR-0002 rule 4)."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@app/*",
+                      "@app/*/**",
+                      "!@app/api-client",
+                      "!@app/api-client/**",
+                      "!@app/contracts",
+                      "!@app/contracts/**",
+                      "!@app/domain",
+                      "!@app/domain/**",
+                      "!@app/ui",
+                      "!@app/ui/**"
+                    ],
+                    "message": "Web apps may import only @app/api-client, @app/contracts, @app/domain and @app/ui (ADR-0002 rule 4)."
+                  },
+                  {
+                    "group": [
+                      "**/apps/api/**",
+                      "**/api/src/**",
+                      "**/packages/db/**",
+                      "**/db/src/**",
+                      "pg/*",
+                      "drizzle-orm",
+                      "drizzle-orm/**"
+                    ],
+                    "message": "Web apps run in the browser: no API server or database code (ADR-0002 rule 4)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/api-client/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "pg": "Client packages run in the browser: no database code (ADR-0002 rule 4)."
+                },
+                "patterns": [
+                  {
+                    "group": ["@app/*", "@app/*/**", "!@app/contracts", "!@app/contracts/**"],
+                    "message": "packages/api-client may import only @app/contracts (ADR-0002 rule 4)."
+                  },
+                  {
+                    "group": [
+                      "**/apps/api/**",
+                      "**/api/src/**",
+                      "**/packages/db/**",
+                      "**/db/src/**",
+                      "pg/*",
+                      "drizzle-orm",
+                      "drizzle-orm/**"
+                    ],
+                    "message": "Client packages run in the browser: no API server or database code (ADR-0002 rule 4)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/ui/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "pg": "Client packages run in the browser: no database code (ADR-0002 rule 4)."
+                },
+                "patterns": [
+                  {
+                    "group": ["@app/*", "@app/*/**"],
+                    "message": "packages/ui holds shared UI only and imports no internal package (ADR-0002 rule 4)."
+                  },
+                  {
+                    "group": [
+                      "**/apps/api/**",
+                      "**/api/src/**",
+                      "**/packages/db/**",
+                      "**/db/src/**",
+                      "pg/*",
+                      "drizzle-orm",
+                      "drizzle-orm/**"
+                    ],
+                    "message": "Client packages run in the browser: no API server or database code (ADR-0002 rule 4)."
                   }
                 ]
               }

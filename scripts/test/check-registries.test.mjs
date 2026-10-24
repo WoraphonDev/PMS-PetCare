@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { checkRegistry, REGISTRIES } from "../check-registries.mjs";
@@ -26,6 +26,37 @@ test("modules: one per line, sorted, trailing commas, spread last", () => {
   assert.match(checkRegistry("modules", mods("      AModule,\n      ...extra, ZModule,")).join(), /one module per line/);
 });
 
+const blk = (body) => `import x from "./x";\n// registry:start\n${body}\n// registry:end\nexport const y = 1;\n`;
+
+test("block: sorted one-line entries between markers pass; code outside is ignored", () => {
+  assert.deepEqual(checkRegistry("block", blk('import { a } from "./a";\nimport { b } from "./b";')), []);
+  assert.deepEqual(checkRegistry("block", `${blk("  a,\n  b,")}${blk('export * from "./c";')}`), []);
+});
+
+test("block: unsorted, multi-line, blank or comment entries fail", () => {
+  assert.match(checkRegistry("block", blk("  b,\n  a,"))[0], /"a," must come before "b,"/);
+  assert.deepEqual(checkRegistry("block", blk('  common,\n  "scr-auth-login": scrAuthLogin,')), [], "quotes are ignored when sorting");
+  assert.match(checkRegistry("block", blk('  "scr-auth-login": scrAuthLogin,\n  common,'))[0], /"common," must come before/);
+  assert.match(checkRegistry("block", blk("  a: {\n  },"))[0], /one complete entry per line/);
+  assert.match(checkRegistry("block", blk("  a\n  b,"))[0], /one complete entry per line/);
+  assert.match(checkRegistry("block", blk("  a,\n\n  b,"))[0], /no blank or comment/);
+  assert.match(checkRegistry("block", blk("  a,\n  // b\n  c,"))[0], /no blank or comment/);
+});
+
+test("block: missing or broken markers fail", () => {
+  assert.match(checkRegistry("block", 'export * from "./a";\n')[0], /no registry block/);
+  assert.match(checkRegistry("block", "// registry:start\n  a,\n").join(), /never closed/);
+  assert.match(checkRegistry("block", "  a,\n// registry:end\n").join(), /without/);
+});
+
+test("optional registries are files created by later cards", () => {
+  for (const { file, optional } of REGISTRIES.filter((r) => r.optional)) assert.ok(optional && file.endsWith(".ts"), file);
+});
+
 test("the repository's registries are sorted", () => {
-  for (const { file, kind } of REGISTRIES) assert.deepEqual(checkRegistry(kind, readFileSync(join(SCRIPTS, "..", file), "utf8")), [], file);
+  for (const { file, kind, optional } of REGISTRIES) {
+    const path = join(SCRIPTS, "..", file);
+    if (optional && !existsSync(path)) continue;
+    assert.deepEqual(checkRegistry(kind, readFileSync(path, "utf8")), [], file);
+  }
 });
