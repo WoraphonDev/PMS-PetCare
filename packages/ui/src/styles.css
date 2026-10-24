@@ -1,0 +1,37 @@
+/*
+ * Shared design tokens (Tailwind v4). The app imports Tailwind first, then this file:
+ *   @import "tailwindcss";
+ *   @import "@app/ui/styles.css";
+ */
+@source "./";
+
+@theme {
+  --color-background: oklch(1 0 0);
+  --color-foreground: oklch(0.21 0.03 265);
+  --color-primary: oklch(0.55 0.15 200);
+  --color-primary-foreground: oklch(0.99 0 0);
+  --color-secondary: oklch(0.96 0.01 250);
+  --color-secondary-foreground: oklch(0.21 0.03 265);
+  --color-muted: oklch(0.96 0.01 250);
+  --color-muted-foreground: oklch(0.55 0.02 260);
+  --color-accent: oklch(0.96 0.01 250);
+  --color-accent-foreground: oklch(0.21 0.03 265);
+  --color-destructive: oklch(0.58 0.22 27);
+  --color-destructive-foreground: oklch(0.99 0 0);
+  --color-border: oklch(0.92 0.01 255);
+  --color-input: oklch(0.92 0.01 255);
+  --color-ring: oklch(0.55 0.15 200);
+  --radius-md: 0.5rem;
+  --font-sans: "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+}
