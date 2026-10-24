@@ -48,13 +48,14 @@ T-0008 กับ T-0009 ทำขนานกันได้
 | [T-0018](T-0018.md) | `audit.list`, `subscription.get` + `audit_log` index migration — spec §17; T-0018-01…03 answered; depends T-0015 | |
 | [T-0019](T-0019.md) | `platform.org.list` / `get` (audit `platform.org_viewed`) / `setStatus` — new `platform` module; spec §18; T-0019-01…04 answered; depends T-0010, T-0015, T-0018 | |
 | [T-0020](T-0020.md) | `platform.org.setPlan` + `platform.plan.list` — spec §18; depends T-0019 | ✓ |
-| T-0021 | outbox relay worker (BullMQ/Valkey) + dead-letter + lag metric | |
+| [T-0021](T-0021.md) | outbox relay worker (BullMQ/Valkey) + dead-letter + lag report; T-0021-01…04 answered (A); human merge of the ADR-0003 audit-exemption amendment (T-0021-04) and the card before implementation | |
 
 ## Wave 4 — PMS web
 
 | card | งาน |
 |---|---|
-| T-0022 | `apps/pms-web` skeleton: Vite + React + TanStack Router/Query + Tailwind/shadcn + PWA + i18n th · `packages/api-client` |
+| [T-0043](T-0043.md) | `packages/api-client` (typed fetch client, `me.get`) + `packages/ui` (`cn`, `Button`) — split out of T-0022 (T-0022-03 A); depends T-0001, T-0007; **merge before T-0022** |
+| [T-0022](T-0022.md) | `apps/pms-web` app skeleton: Vite + React + TanStack Router/Query + Tailwind + PWA (API bypass, update prompt) + typed i18n th; T-0022-01…03 answered (A); depends T-0043 |
 | T-0023 | auth screens + `/verify-email` fragment → clear history → POST JSON; resend/recovery/invalid/expired/replaced; 201 ไม่อ้าง confirmed delivery; depends T-0022, T-0011, T-0035, T-0036; release gate signup |
 | T-0024 | app shell: org/branch switcher, nav ตามสิทธิ์, แถบร้านถูกระงับ |
 | T-0025 | settings: org, branches, branch (ข้อมูล/เวลา/วันหยุด/การชำระเงิน) |
