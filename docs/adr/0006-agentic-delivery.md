@@ -45,7 +45,7 @@
 - เมื่อติด `agent-approved`: ตรวจเองซ้ำว่า PR มาจาก repo นี้, base = `main`, branch `t-NNNN-*`, การ์ดบน `main` มี `owner: agent` และ `human_review: false`
   → เปิด GitHub auto-merge (squash) ซึ่งยังรอ required check `verify` และ conversation ที่ resolve ครบตาม branch protection
   ไม่ผ่านเงื่อนไข → ถอด label และ comment เหตุผล
-- push ใหม่หลังติด label → ถอด label + ยกเลิก auto-merge (commit ใหม่ต้อง review ใหม่)
+- push ใหม่หลังติด label → ถอด label + ยกเลิก auto-merge ยกเว้นเป็น merge commit เดียวที่ parent แรกตรง SHA ที่ workflow บันทึกตอนอนุมัติจริง (bot marker ไม่ใช่ SHA ของ push ก่อนหน้า), parent ที่สองอยู่ในประวัติ main และ tree ตรงผล clean merge ของ Git ทุก byte (`scripts/same-pr-diff.sh`); conflict/manual edit/rebase/หลักฐานไม่ครบ → review ใหม่เสมอ ไม่มีการอนุมัติหรือเปิด auto-merge ใหม่จากขั้นตอนนี้ และ `verify` ยังต้องผ่านบน head ใหม่
 
 มนุษย์ merge เอง: การ์ด `human_review: true`, และ PR ที่ไม่ใช่การ์ด (spec / ADR / AGENTS.md / CI / scripts) เพราะเป็นการเปลี่ยนกติกา
 
@@ -81,9 +81,10 @@
    CI ตรวจรูปแบบคำถาม (`scripts/questions-index.mjs --check`) และ registry (`schema/index.ts`, `contracts/src/index.ts`, module list ใน `create-app.ts`)
    ต้องเป็น 1 รายการต่อบรรทัด เรียงตามตัวอักษร (`scripts/check-registries.mjs`);
    lockfile / migration ที่ชนกันให้ tool สร้างใหม่ (`scripts/sync-main.sh`) ไม่แก้ด้วยมือ; script ใน `scripts/` มี test (`pnpm test:scripts`)
-9. **Branch ต้องตามทัน main ก่อน merge** (branch protection `strict`): agent รัน `sync-main.sh` ตอนเริ่มการ์ด, ก่อน review แต่ละรอบ และก่อนติด `agent-approved`;
-   จับ conflict เชิงความหมาย (merge ได้แต่ test พัง) ก่อน merge จริง. sync หลัง review CLEAN ไม่นับเป็นรอบ review (merge สะอาด + CI เขียว → ติด label ได้เลย; แก้ conflict เอง → sync review 1 ครั้ง ไม่ผ่าน → ถามมนุษย์). main ขยับหลังติด label → PR รอ จน agent sync ใหม่ หรือมนุษย์กด "Update branch"
-   ข้อจำกัดที่รู้: อัปเดต branch อัตโนมัติด้วย `GITHUB_TOKEN` ใช้ไม่ได้ (merge ของ auto-merge ไม่ trigger workflow อื่น, run จาก `workflow_dispatch` ไม่นับเป็น required check) — รอ GitHub App token (process-fixes PR 5)
+9. **ลด sync/review ที่ซ้ำซ้อน** (มนุษย์อนุมัติเปลี่ยน branch protection เป็น `strict: false`): ยังบังคับ required check `verify`, conversation resolution และห้าม force-push/push ตรงเหมือนเดิม Agent sync ตอนเริ่ม/ก่อน review/ก่อนติด label ตาม AGENTS แต่ main ขยับหลังอนุมัติไม่บังคับให้ update branch และ review ใหม่เพียงเพราะ behind main
+   - clean sync ที่พิสูจน์ตามข้อ 2.2 เก็บ approval ได้; แก้ conflict เองหรือเปลี่ยนโค้ดต้อง review ใหม่
+   - trade-off: CI ที่ผ่านบน PR ไม่ได้รับประกัน compatibility กับ main ที่ merge ภายหลัง ต้องติดตาม CI บน main และหยุด dispatch งานต่อเมื่อ main แดง; ห้ามอ้างว่าไม่เกิด semantic conflict แล้ว
+   - ไม่เพิ่ม PAT หรือ credential ใหม่ ไม่ทำ auto-update bot และไม่ปิด CI
 
 ### 4. Agent ต้องหยุดถาม (เขียน `docs/questions/<card>-NN.md` — 1 คำถาม 1 ไฟล์) เมื่อ
 

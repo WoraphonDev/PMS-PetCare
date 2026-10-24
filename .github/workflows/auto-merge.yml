@@ -2,7 +2,8 @@
 # The agent adds the `agent-approved` label after CI is green and the Codex review loop ends CLEAN.
 # This workflow re-checks every condition itself — the label alone is not trusted — then enables GitHub
 # auto-merge, which still waits for the required `verify` check and resolved conversations (branch protection).
-# Any new push removes the label and cancels auto-merge, so new commits need a fresh review.
+# Any new push removes the label and cancels auto-merge, so new commits need a fresh review — except a push that
+# is exactly Git's conflict-free merge of trusted main (scripts/same-pr-diff.sh), which keeps existing approval.
 name: auto-merge
 on:
   pull_request:
@@ -18,7 +19,45 @@ jobs:
     if: github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'agent-approved')
     runs-on: ubuntu-24.04
     steps:
+      # The script comes from the base branch (main), never from the PR; the PR's commits are only read by git.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Is this push only a merge of main?
+        id: same
+        env:
+          AFTER: ${{ github.event.after }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Default false: missing objects/fetch errors never preserve approval.
+          echo "same=false" >> "$GITHUB_OUTPUT"
+          if ! git fetch --no-tags origin "+refs/pull/${PR}/head:refs/remotes/pr/head" "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"; then
+            exit 0
+          fi
+          # A newer synchronize event may already have moved the PR. Do not preserve stale approval.
+          [ "$(git rev-parse refs/remotes/pr/head)" = "$AFTER" ] || exit 0
+          # Read the SHA recorded by the eligible label event, NOT event.before: intermediate reset runs
+          # can be replaced by GitHub's concurrency queue during rapid pushes.
+          if ! gh api --paginate --slurp "repos/${REPO}/issues/${PR}/comments" > "$RUNNER_TEMP/approval-comments.json"; then
+            exit 0
+          fi
+          APPROVED=$(node scripts/approved-head.mjs "$RUNNER_TEMP/approval-comments.json") || exit 0
+          git cat-file -e "${APPROVED}^{commit}" 2>/dev/null || git fetch --no-tags origin "$APPROVED" || true
+          if [ "$BASE_REF" = main ] && bash scripts/same-pr-diff.sh "$APPROVED" "$AFTER" "origin/main"; then
+            # New anchor is itself proven from the last approved SHA. Never advance after unreviewed edits.
+            gh pr comment "$PR" -R "$REPO" --body "<!-- pms-agent-approved-sha:${AFTER} -->"
+            echo "same=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Only main was merged in — keep existing approval
+        if: steps.same.outputs.same == 'true'
+        run: echo "Clean main-only sync; keeping existing label and auto-merge setting. Required verify still applies."
       - name: New commits need a new review — drop approval and cancel auto-merge
+        if: always() && steps.same.outputs.same != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
@@ -59,7 +98,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-        run: gh pr merge "$PR" -R "$REPO" --auto --squash --delete-branch
+          APPROVED: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # The eligible label event approves this exact head only. A later push needs its own review/sync proof.
+          CURRENT=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq '.headRefOid')
+          if [ "$CURRENT" != "$APPROVED" ]; then
+            gh pr edit "$PR" -R "$REPO" --remove-label agent-approved
+            gh pr merge "$PR" -R "$REPO" --disable-auto || true
+            exit 1
+          fi
+          gh pr comment "$PR" -R "$REPO" --body "<!-- pms-agent-approved-sha:${APPROVED} -->"
+          gh pr merge "$PR" -R "$REPO" --auto --squash --delete-branch --match-head-commit "$APPROVED"
       - name: Explain why not
         if: steps.check.outputs.eligible != 'true'
         env:

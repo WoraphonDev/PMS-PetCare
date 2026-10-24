@@ -17,6 +17,9 @@
 
 ## กติกา
 
+- ไม่ต่อท้ายรายการการ์ด/สถานะใน `PLAN-foundation.md` ซึ่งเก็บเป็น historical roadmap แล้ว การ์ดแต่ละใบเป็นแหล่ง dependency หลัก: `node scripts/plan-index.mjs` สร้าง index และ `--check` ตรวจ graph โดยไม่เดาว่า implementation เสร็จจากข้อความ commit ตรวจ PR และ decision gates ก่อน dispatch เสมอ
+- Spec additions/decisions ใหม่ใช้ `docs/spec/amendments/T-NNNN.md` ตาม [amendment rules](../spec/amendments/README.md) ไม่ต่อท้าย foundation.md ทุก branch; merged cards/spec เก่ายังอ้าง path/anchor เดิมได้ ไม่มีการเปลี่ยนสัญญาธุรกิจอัตโนมัติ
+
 - การ์ดเขียนโดยมนุษย์ หรือ agent ในการ์ดประเภท `spec` ที่มนุษย์อนุมัติ
 - ไฟล์การ์ดเขียนโดยมนุษย์เท่านั้น — agent ห้ามแก้ (แม้แต่ Status log) เพื่อให้มนุษย์แก้การ์ดบน main ได้โดยไม่ conflict กับ branch ที่ทำอยู่
 - agent บันทึกความคืบหน้าใน `docs/tasks/log/T-NNNN.md` (ไฟล์ของการ์ดตัวเอง) และเขียนคำถามเป็น `docs/questions/T-NNNN-NN.md`
