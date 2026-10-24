@@ -22,3 +22,8 @@ export async function subscriptionsOf(tx: Tx, orgIds: readonly string[]): Promis
   }
   return found;
 }
+
+/** #contract-platform-plan-list: every plan, active or not, by code. */
+export function listPlans(tx: Tx) {
+  return tx.query.plan.findMany({ orderBy: (p, { asc }) => [asc(p.code)] });
+}
