@@ -30,7 +30,10 @@ export function ResetScreen() {
     e.preventDefault();
     const parsed = AuthPasswordResetRequest.safeParse({ token, password: values.password });
     if (!parsed.success) {
-      setErrors({ fields: issueErrors(parsed.error) });
+      const fields = issueErrors(parsed.error);
+      // The token is not a form field: a link token the contract rejects means the link is unusable.
+      if ("token" in fields) setTokenInvalid(true);
+      else setErrors({ fields });
       return;
     }
     if (values.confirm !== values.password) {

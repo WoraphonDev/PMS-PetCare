@@ -75,6 +75,15 @@ describe("scr-auth-reset (/reset-password?token=…)", () => {
     expect(screen.queryByText(r.tokenInvalid)).toBeNull();
   });
 
+  it("a token the contract rejects (over 256 characters) → tokenInvalid + link, no request", async () => {
+    const { fetch } = openWith(`?token=${"x".repeat(257)}`);
+    await screen.findByRole("heading", { name: r.title });
+    submit("new-password-1");
+    expect(await screen.findByText(r.tokenInvalid)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: r.requestNew })).toHaveAttribute("href", "/forgot-password");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("no token → tokenInvalid with no form and no request", async () => {
     const { fetch } = openWith("");
     expect(await screen.findByText(r.tokenInvalid)).toBeInTheDocument();
