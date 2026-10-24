@@ -3,11 +3,26 @@ import {
   AuthEmailVerifyRequest,
   AuthLoginRequest,
   type AuthLoginResponse,
+  AuthPasswordChangeRequest,
+  AuthPasswordForgotRequest,
+  AuthPasswordResetRequest,
   AuthSignupRequest,
+  AuthTwoFactorVerifyRequest,
   type MeResponse,
 } from "@app/contracts";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { authEmailVerificationResend, authEmailVerify, authLogin, authSignup, createApiClient, meGet } from "../../src/index";
+import {
+  authEmailVerificationResend,
+  authEmailVerify,
+  authLogin,
+  authPasswordChange,
+  authPasswordForgot,
+  authPasswordReset,
+  authSignup,
+  authTwoFactorVerify,
+  createApiClient,
+  meGet,
+} from "../../src/index";
 
 const me: MeResponse = {
   user: {
@@ -130,5 +145,49 @@ describe("auth descriptors (T-0023)", () => {
       void api.request(authEmailVerify);
     };
     expect(typeChecks).toBeTypeOf("function");
+  });
+});
+
+describe("2FA / password descriptors (T-0045)", () => {
+  function setup(response: Response) {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response);
+    const api = createApiClient({ baseUrl: "/api/v1", fetch });
+    const sent = () => {
+      const [url, init] = fetch.mock.calls[0] ?? [];
+      return { url, method: init?.method, body: init?.body };
+    };
+    return { api, sent };
+  }
+
+  it.each([
+    [
+      "auth.twoFactor.verify",
+      authTwoFactorVerify,
+      "/api/v1/auth/2fa/verify",
+      { code: "123456", trustDevice: true },
+      AuthTwoFactorVerifyRequest,
+    ],
+    [
+      "auth.passwordChange",
+      authPasswordChange,
+      "/api/v1/auth/password/change",
+      { currentPassword: "old-password", newPassword: "new-password-1" },
+      AuthPasswordChangeRequest,
+    ],
+    ["auth.passwordForgot", authPasswordForgot, "/api/v1/auth/password/forgot", { email: "a@example.com" }, AuthPasswordForgotRequest],
+    [
+      "auth.passwordReset",
+      authPasswordReset,
+      "/api/v1/auth/password/reset",
+      { token: "t", password: "new-password-1" },
+      AuthPasswordResetRequest,
+    ],
+  ] as const)("%s: POST %s with the JSON body → 204 undefined", async (_, endpoint, url, body, schema) => {
+    const { api, sent } = setup(new Response(null, { status: 204 }));
+    const request = api.request as (endpoint: unknown, input: unknown) => Promise<unknown>;
+    await expect(request(endpoint, { body })).resolves.toBeUndefined();
+    expect(sent()).toEqual({ url, method: "POST", body: JSON.stringify(body) });
+    expect(endpoint.body).toBe(schema);
+    expect(endpoint.response).toBeNull();
   });
 });
