@@ -2,16 +2,23 @@ import { branchList, subscriptionGet } from "@app/api-client";
 import type { SubscriptionGetResponse } from "@app/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "../../i18n";
-import { useOrgApi } from "../../lib/org-context";
+import { useOrg, useOrgApi } from "../../lib/org-context";
+import { canSee } from "../../lib/permissions";
 
 // Shop-scoped keys: the org context drops them when the shop changes.
 export const branchesKey = ["branches"] as const;
 export const subscriptionKey = ["subscription"] as const;
 
 /** #rule-branch-list — also the only source of one branch (there is no GET /branches/{id}). */
-export function useBranches() {
+export function useBranches(enabled = true) {
   const o = useOrgApi();
-  return useQuery(o.queryOptions(branchesKey, () => o.request(branchList)));
+  return useQuery({ ...o.queryOptions(branchesKey, () => o.request(branchList)), enabled });
+}
+
+/** §7: the branch screens are for owner and manager; other roles get the forbidden text and no request. */
+export function useMaySeeBranches() {
+  const { membership } = useOrg();
+  return membership !== null && canSee("branches", membership.role);
 }
 
 export function useSubscription(enabled: boolean) {

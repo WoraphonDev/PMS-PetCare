@@ -31,6 +31,15 @@ describe("scr-settings-branch (/settings/branches/:branchId)", () => {
     expect(screen.getByRole("button", { name: f.save })).toBeDisabled();
   });
 
+  it("moving to another branch URL shows that branch's values, not the previous form state", async () => {
+    const r = await open();
+    fireEvent.change(await screen.findByLabelText(f.name), { target: { value: "แก้ค้างไว้" } });
+    await r.router.navigate({ to: "/settings/branches/$branchId", params: { branchId: second().id } });
+    expect(await screen.findByDisplayValue("สาขาสอง")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("แก้ค้างไว้")).toBeNull();
+    expect(screen.getByLabelText(f.isActive)).not.toBeChecked();
+  });
+
   it("an id not in the list → notFound", async () => {
     renderApp(`/settings/branches/${UNKNOWN}`, {
       "GET /me": json(200, me()),

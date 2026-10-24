@@ -5,13 +5,15 @@ import { useOrg } from "../../lib/org-context";
 import { can } from "../../lib/permissions";
 import { FormMessage } from "../auth/field";
 import { AppLink } from "../shell/nav";
-import { useBranches } from "./queries";
+import { useBranches, useMaySeeBranches } from "./queries";
 
 // foundation#scr-settings-branch — tab frame. Hours / closures / payment pages come with T-0046 (not found until then).
 export function BranchLayout({ branchId }: { branchId: string }) {
   const { membership } = useOrg();
-  const branches = useBranches();
+  const maySee = useMaySeeBranches();
+  const branches = useBranches(maySee);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  if (!maySee) return <p>{t("errors.FORBIDDEN")}</p>;
   if (branches.error) return <FormMessage>{errorMessage(branches.error)}</FormMessage>;
   if (!branches.data) return null;
   // Not in the list: another shop's branch, or not assigned to this user (F02).

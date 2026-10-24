@@ -9,14 +9,14 @@ import { useOrg, useOrgApi } from "../../lib/org-context";
 import { can } from "../../lib/permissions";
 import { FormMessage } from "../auth/field";
 import { BranchFields, branchValues, coordsError, emptyBranch, numberOrNull, textOrNull } from "./branch-fields";
-import { branchesKey, useBranches } from "./queries";
+import { branchesKey, useBranches, useMaySeeBranches } from "./queries";
 
 // foundation#scr-settings-branch ข้อมูล tab — `timezone` and `promptpayId` are read-only here (#ep-branch.update).
 export function BranchInfoTab({ branchId }: { branchId: string }) {
-  const branches = useBranches();
+  const branches = useBranches(useMaySeeBranches());
   const branch = branches.data?.items.find((b) => b.id === branchId);
   // The layout shows "not found"; re-mount on new server data so the form starts from what was saved.
-  return branch ? <InfoForm key={branches.dataUpdatedAt} branch={branch} /> : null;
+  return branch ? <InfoForm key={`${branch.id}:${branches.dataUpdatedAt}`} branch={branch} /> : null;
 }
 
 /** Only changed fields; the coordinates go as a pair whenever either changed (#contract-branch). */

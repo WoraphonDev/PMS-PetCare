@@ -7,13 +7,14 @@ import { useOrg } from "../../lib/org-context";
 import { can } from "../../lib/permissions";
 import { FormMessage } from "../auth/field";
 import { CreateBranchDialog } from "./create-branch-dialog";
-import { limitText, underLimit, useBranches, useSubscription } from "./queries";
+import { limitText, underLimit, useBranches, useMaySeeBranches, useSubscription } from "./queries";
 
 // foundation#scr-settings-branches — add button only for branch.create and under the plan limit (§7).
 export function BranchListScreen() {
   const { membership } = useOrg();
-  const mayCreate = membership !== null && can(membership.role, "branch.create");
-  const branches = useBranches();
+  const maySee = useMaySeeBranches();
+  const mayCreate = maySee && membership !== null && can(membership.role, "branch.create");
+  const branches = useBranches(maySee);
   const subscription = useSubscription(mayCreate).data;
   const [adding, setAdding] = useState(false);
 
@@ -27,6 +28,7 @@ export function BranchListScreen() {
           </Button>
         )}
       </div>
+      {!maySee && <p>{t("errors.FORBIDDEN")}</p>}
       {subscription && !underLimit(subscription) && <p className="text-sm text-muted-foreground">{limitText(subscription)}</p>}
       {subscription && underLimit(subscription) && adding && <CreateBranchDialog subscription={subscription} />}
       {branches.error && <FormMessage>{errorMessage(branches.error)}</FormMessage>}

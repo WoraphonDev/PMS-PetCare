@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { th } from "../../src/i18n/th";
 import { apiError, BRANCH_1, BRANCH_2, json, me, membership, renderApp } from "../shell/render";
@@ -58,6 +58,24 @@ describe("scr-settings-branches (/settings/branches)", () => {
     expect(screen.queryByRole("button", { name: c.add })).toBeNull();
     expect(r.calls("GET /subscription")).toHaveLength(0);
   });
+});
+
+describe("branch screens are owner / manager only (foundation §7)", () => {
+  it.each(["front_desk", "groomer", "caretaker"] as const)(
+    "%s opening the list or a detail URL sees the forbidden text, no request",
+    async (role) => {
+      for (const path of ["/settings/branches", `/settings/branches/${BRANCH_1}`]) {
+        const r = renderApp(path, {
+          "GET /me": json(200, me({}, [membership({ role })])),
+          "GET /branches": json(200, { items: [branch()] }),
+        });
+        expect(await screen.findByText(th.errors.FORBIDDEN)).toBeInTheDocument();
+        expect(r.calls("GET /branches")).toHaveLength(0);
+        expect(r.calls("GET /subscription")).toHaveLength(0);
+        cleanup();
+      }
+    },
+  );
 });
 
 describe("add branch dialog", () => {
