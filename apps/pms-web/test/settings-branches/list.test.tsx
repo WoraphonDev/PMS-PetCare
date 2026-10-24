@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { th } from "../../src/i18n/th";
-import { apiError, BRANCH_1, BRANCH_2, json, me, membership, renderApp } from "../shell/render";
+import { apiError, BRANCH_1, BRANCH_2, json, me, membership, ORG_B, renderApp } from "../shell/render";
 import { branch, second, subscription } from "./fixtures";
 
 const c = th["scr-settings-branches"];
@@ -149,5 +149,30 @@ describe("add branch dialog", () => {
     d.submit();
     expect(await within(d.dialog).findByText(c.nameTaken)).toBeInTheDocument();
     expect(within(d.dialog).getByLabelText(f.name)).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("a create answered after switching shop does not navigate to the old shop's branch", async () => {
+    const shops = [membership(), membership({ orgId: ORG_B, name: "Cat Club" })];
+    const r = renderApp("/settings/branches", {
+      "GET /me": json(200, me({}, shops)),
+      "GET /branches": json(200, { items: [branch()] }),
+      "GET /subscription": json(200, subscription(3, 1)),
+    });
+    fireEvent.click(await screen.findByRole("button", { name: c.add }));
+    const dialog = await screen.findByRole("dialog");
+    const routed = r.fetch.getMockImplementation();
+    let answer: (res: Response) => void = () => {};
+    r.fetch.mockImplementation(async (url, init) => {
+      if (init?.method === "POST") return new Promise<Response>((resolve) => (answer = resolve));
+      return routed ? routed(url, init) : json(404, {});
+    });
+    fireEvent.change(within(dialog).getByLabelText(f.name), { target: { value: "สาขาใหม่" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: c.add }));
+    await waitFor(() => expect(r.calls("POST /branches")).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: /Cat Club/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    answer(json(201, branch({ id: BRANCH_2, name: "สาขาใหม่" })));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(r.pathname()).toBe("/settings/branches");
   });
 });

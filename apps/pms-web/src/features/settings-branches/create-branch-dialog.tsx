@@ -3,7 +3,7 @@ import { type Branch, BranchCreateRequest, type BranchListResponse, type Subscri
 import { Button } from "@app/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
 import { type FormErrors, formErrors, issueErrors } from "../../lib/form-errors";
 import { useOrgApi } from "../../lib/org-context";
@@ -16,8 +16,15 @@ export function CreateBranchDialog({ subscription }: { subscription: Subscriptio
   const o = useOrgApi();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const current = useRef(o.orgId);
+  // Shop shown by this dialog; null once it unmounts (a shop switch removes it), so a late answer never navigates.
+  const current = useRef<string | null>(o.orgId);
   current.current = o.orgId;
+  useEffect(() => {
+    current.current = o.orgId;
+    return () => {
+      current.current = null;
+    };
+  }, [o.orgId]);
   const [values, setValues] = useState(emptyBranch);
   const [errors, setErrors] = useState<FormErrors>({ fields: {} });
   const mutation = useMutation({
