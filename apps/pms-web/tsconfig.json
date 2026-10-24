@@ -1,0 +1,7 @@
+{
+  "extends": "../../packages/config/tsconfig.react.json",
+  "compilerOptions": {
+    "types": ["vite/client", "vite-plugin-pwa/client"]
+  },
+  "include": ["src", "test", "vite.config.ts", "vitest.config.ts", "vitest.build.config.ts"]
+}
