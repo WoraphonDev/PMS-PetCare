@@ -17,6 +17,7 @@ SaaS ที่หลายร้านใช้ระบบเดียว ร�
   1. application: repository ทุกตัวรับ `TenantContext` และเติม `org_id` ให้เสมอ (ห้าม query ตารางของร้านโดยไม่ผ่าน helper นี้)
   2. database: **Postgres Row-Level Security** — ทุก request ตั้ง `SET LOCAL app.org_id = …` ใน transaction; policy บังคับ `org_id = current_setting('app.org_id')`
 - role ของแอปเป็น non-superuser ที่ไม่มี `BYPASSRLS`; งานข้ามร้าน (platform admin, Marketplace read model) ใช้ role/connection แยกและเขียน `audit_log`
+  - **ข้อยกเว้นเดียว (T-0021-04 A, 2026-10-24):** การที่ outbox worker อัปเดต `outbox_event.published_at` และ `outbox_event.attempts` (delivery bookkeeping) ไม่เขียน `audit_log` — เป็นสถานะการส่งของแถวที่ API เขียนไว้แล้ว ไม่ใช่การเปลี่ยนข้อมูลธุรกิจ บันทึกการทำงานอยู่ใน structured log ของ worker (T-0021-01). การเขียนอื่นทุกอย่างบน platform connection ยังต้องเขียน `audit_log` ตามเดิม; ไม่มี audit action ใหม่
 - ทดสอบทุก endpoint: เข้าถึงข้อมูลร้านอื่น → `NOT_FOUND`
 
 ### ลำดับชั้น
