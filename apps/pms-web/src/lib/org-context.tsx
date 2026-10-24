@@ -2,7 +2,7 @@ import type { Endpoint, RequestInput, ResponseOf } from "@app/api-client";
 import type { MeResponse } from "@app/contracts";
 import { type QueryKey, useQueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
-import { createContext, type ReactNode, useContext, useMemo, useState } from "react";
+import { createContext, type ReactNode, useContext, useMemo, useRef, useState } from "react";
 import { meQueryKey, sessionRequired } from "./session";
 
 // foundation#scr-org-switcher — current shop + branch, remembered per user.
@@ -53,6 +53,13 @@ export function OrgProvider({ me, children }: { me: MeResponse; children: ReactN
   const queryClient = useQueryClient();
   const [stored, setStored] = useState(() => readStored(me.user.id));
   const { membership, branch } = resolveContext(me, stored);
+  // Data of one shop must never render under another — whether the user switched or the shop left `me`
+  // (fallback): drop everything but `me` before children render with the new org.
+  const shownOrgId = useRef(membership?.org.id);
+  if (shownOrgId.current !== membership?.org.id) {
+    shownOrgId.current = membership?.org.id;
+    queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== meQueryKey[0] });
+  }
 
   const value: OrgContextValue = {
     me,
@@ -60,8 +67,6 @@ export function OrgProvider({ me, children }: { me: MeResponse; children: ReactN
     branch,
     selectOrg(orgId) {
       if (orgId === membership?.org.id) return;
-      // Data of one shop must never render under another: drop everything but `me` before the switch.
-      queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== meQueryKey[0] });
       const next = { orgId };
       writeStored(me.user.id, next);
       setStored(next);

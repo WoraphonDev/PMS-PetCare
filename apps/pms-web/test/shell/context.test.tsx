@@ -124,3 +124,16 @@ describe("X-Org-Id and org switching", () => {
     await waitFor(() => expect(new Headers(fetch.mock.calls.at(-1)?.[1]?.headers).get("x-org-id")).toBe(ORG_B));
   });
 });
+
+describe("membership fallback after a me refetch (review r1)", () => {
+  it("current org removed from me → old org data removed before the fallback org renders; ['me'] stays", async () => {
+    const app = renderApp("/", { "GET /me": json(200, twoShops()) });
+    await screen.findByRole("heading", { name: "Shop A" });
+    app.queryClient.setQueryData(["other", ORG_A], "secret");
+    const onlyB = me({}, [membership({ orgId: ORG_B, name: "Shop B", role: "groomer" })]);
+    act(() => app.queryClient.setQueryData(["me"], onlyB));
+    expect(await screen.findByRole("heading", { name: "Shop B" })).toBeInTheDocument();
+    expect(app.queryClient.getQueryData(["other", ORG_A])).toBeUndefined();
+    expect(app.queryClient.getQueryData(["me"])).toEqual(onlyB);
+  });
+});
