@@ -8,19 +8,20 @@ import { th } from "../src/i18n/th";
 import { createAppRouter } from "../src/router";
 import { Route as rootRoute } from "../src/routes/__root";
 
-function renderAt(path: string) {
+function renderAt(path: string, response?: Response) {
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => response?.clone() ?? new Response(null, { status: 404 }));
   const router = createAppRouter({
     queryClient: new QueryClient(),
-    api: createApiClient({ baseUrl: "/api/v1", fetch: vi.fn() }),
+    api: createApiClient({ baseUrl: "/api/v1", fetch }),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
   render(<RouterProvider router={router} />);
 }
 
 describe("router", () => {
-  it("/ shows the Thai app name from the message file", async () => {
-    renderAt("/");
-    expect(await screen.findByRole("heading", { name: th.common.appName })).toBeInTheDocument();
+  it("/ without a session redirects to /login (home is under _app, T-0024-02 A)", async () => {
+    renderAt("/", new Response(JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "x" } }), { status: 401 }));
+    expect(await screen.findByRole("heading", { name: th["scr-auth-login"].title })).toBeInTheDocument();
   });
 
   it("an unknown path shows the Thai not-found text", async () => {
