@@ -9,7 +9,7 @@ Run the whole card workflow yourself. The human should only need to answer quest
 
 ## 1. Pick and check the card
 
-- Card given (`T-NNNN`) → use it. "next card" → first card in `docs/tasks/PLAN-*.md` order that has a file, is not merged (`git log --oneline origin/main | grep T-NNNN`), and whose `depends_on` are all merged.
+- Card given (`T-NNNN`) → use it. "next card" → use `node scripts/plan-index.mjs` for the dependency index; independently check merged implementation PRs and decision gates. `PLAN-foundation.md` is historical; a grep hit mentioning a card is not proof it is implemented.
 - `depends_on` not merged → stop and tell the user which.
 - `owner: human` → stop.
 
@@ -25,7 +25,7 @@ Default: you (Claude) are Dev, Codex reviews. If you are near your usage limit, 
 4. Tests first, then code. Stay inside `allowed_paths`. Spec gap → write `docs/questions/T-NNNN-NN.md` (one file per question) + stop that part.
 5. Run every *Done when* command + `pnpm verify` + `TASK_ID=T-NNNN node scripts/check-task-scope.mjs`. Fix until green.
 6. Append to `docs/tasks/log/T-NNNN.md` (never edit the card — it is human-only). Commit. Push. Open the PR with `.github/pull_request_template.md` filled in (real numbers, not estimates).
-7. Wait for CI (`gh pr checks <n> --watch`).
+7. Wait for the **CI `verify` check only** (inspect `gh pr checks <n> --json name,state` or watch the `ci.yml` run for this exact head with `gh run watch <run-id> --exit-status`). `approval-proof` intentionally does not pass for an unapproved agent task; do not wait for it before review/labelling.
 
 ## 3. Codex review loop (ADR-0006 — max 3 rounds)
 
@@ -51,11 +51,12 @@ Only when CI is green, the last round is `CLEAN`, and every review thread is res
 - Card `human_review: false` → `gh pr edit <n> --add-label agent-approved`. The `auto-merge` workflow re-checks the card and merges after the required checks; watch for its comment if it refuses.
 - Card `human_review: true` → do **not** label; the human reviews and merges.
 
-Never run `gh pr merge` yourself. Pushing again after labelling removes the label — re-run the loop and label again.
-Branch protection requires the branch to be up to date with main. If main moves after labelling, the PR waits: run `scripts/sync-main.sh`, push (this drops the label), wait for CI, re-label per *Syncing after CLEAN*. (Automatic branch updates need the bot token from process-fixes PR 5.)
+Never run `gh pr merge` yourself. After labelling, `approval-proof` is a required head-specific merge gate. Only an exact clean merge of main verified against the recorded approved SHA preserves approval. Code edits, regenerated lockfile/migrations, manual conflict resolution or missing proof require new review and re-labelling.
+Main moving after labelling does **not** require a branch update (`strict: false`); do not create update/review loops just because a PR is behind main. Required `verify` and `approval-proof` still apply.
 
 **Syncing after CLEAN** (does not count toward the 3 review rounds — it adds main's code, not yours):
-- merged cleanly or only lockfile/migrations regenerated, CI green → label again, no new review
+- merged cleanly with the exact Git merge tree → existing approval can be preserved by `approval-proof`; CI `verify` must pass on the new head
+- any other change, including lockfile/migration regeneration → a new cross-agent review is required
 - you resolved a conflict by hand → one *sync review*: `scripts/codex-review.sh T-NNNN sync` on the merge; `CLEAN` → label; anything else → stop and ask the human
 
 ## 5. Hand-off to the human

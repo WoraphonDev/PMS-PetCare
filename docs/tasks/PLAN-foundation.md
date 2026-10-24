@@ -1,5 +1,7 @@
 # Plan — Foundation
 
+> **Historical roadmap, not a live registry.** Do not append new cards or completion ticks here. Use `node scripts/plan-index.mjs` for the current dependency index generated from individual cards; validate with `node scripts/plan-index.mjs --check`. It does not infer completion/readiness from commit messages. New card = one `T-NNNN.md`, decisions = its question/amendment files. Retain this roadmap for historical context and existing links.
+
 แผนแตกการ์ดของ `docs/spec/features/foundation.md` · การ์ดที่มีไฟล์แล้ว = มีรายละเอียด scope; พร้อมทำเมื่อ dependencies/spec merge และ technical gates ของใบนั้นผ่านแล้ว · ที่เหลือจะเขียนละเอียดเมื่อ wave ก่อนหน้า merge
 (เพื่อให้การ์ดอ้างโครงไฟล์จริง ไม่ใช่โครงที่เดาไว้)
 
