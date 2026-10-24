@@ -933,12 +933,15 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 - transaction เดียว ลำดับการตรวจ (check แรกที่ไม่ผ่านเป็นคำตอบ):
   1. token ผิดรูปแบบ → `INVITATION_INVALID`
   2. ตรวจคำเชิญเหมือน #contract-invitation-accept ข้อ 6–10 (preflight, lock subscription, lock คำเชิญแล้วตรวจซ้ำ, อ่าน `organization.status` ซ้ำ) **ยกเว้นการเทียบ email กับ user** (ยังไม่มี user — email ของบัญชีใหม่คือ email ของคำเชิญ) → `INVITATION_INVALID` / `ORG_SUSPENDED` / `INTERNAL` (ไม่มี subscription); ข้อ 11 (membership เดิม) ไม่เกิดเพราะเป็น user ใหม่
-  3. มีบัญชีที่ใช้ email นี้อยู่แล้ว (ไม่สนตัวพิมพ์ รวมบัญชีที่ยังไม่ verify) → `CONFLICT` — ให้ login แล้วใช้ #contract-invitation-accept แทน
+  3. มีบัญชีที่ใช้ email นี้อยู่แล้ว (ไม่สนตัวพิมพ์ รวมบัญชีที่ยังไม่ verify) → `CONFLICT` — ให้ login แล้วใช้ #contract-invitation-accept แทน; ข้อนี้เป็นการตรวจล่วงหน้าเท่านั้น ไม่ใช่สิ่งที่กันการแข่ง (ดู #rule-signup-invite-email-race)
   4. สร้าง user ผ่าน public service ของ `identity`: `email` = email ของคำเชิญ (ตัวพิมพ์เล็ก), `name` = `displayName`, `emailVerified = true` (token ที่ส่งไปยัง email นั้นพิสูจน์การเป็นเจ้าของ), `isManaged = false`, `mustChangePassword = false`
   5. เขียนการรับคำเชิญเหมือน #contract-invitation-accept (insert membership + `membership_branch`, `display_name = displayName`, คำเชิญ `accepted_at = now`) และ audit `staff.joined` (actor = user ใหม่, `before` null, `after { role, branchIds, invitationId }`)
 - ไม่ตรวจ `max_staff` (คำเชิญที่ค้างนับไว้แล้ว — #rule-staff-capacity); ไม่ส่งอีเมล; ไม่มี outbox
 - ตอบ **201** `{ orgId, role }` ไม่มี session/cookie — ผู้ใช้ login ต่อด้วย #ep-auth.login (F10 ใช้ตามปกติ)
 - ล้มเหลวขั้นใดก็ตาม → rollback ทั้งหมด (ไม่มี user, membership, การใช้คำเชิญ หรือ audit ค้าง); แข่งกับ revoke หรือการสมัคร/รับคำเชิญด้วย token เดียวกัน: ผู้ได้ lock คำเชิญก่อนชนะ อีกฝ่าย `INVITATION_INVALID`
+
+<a id="rule-signup-invite-email-race"></a>
+- **email ซ้ำที่แข่งกัน:** lock คำเชิญ serialize เฉพาะ request ที่ใช้ **คำเชิญใบเดียวกัน** — ไม่กันการแข่ง**ข้ามคำเชิญ** (เช่น สองร้านเชิญ email เดียวกัน แล้วสมัครผ่านทั้งสองลิงก์พร้อมกัน) และ**ข้าม flow** (`auth.signupWithInvitation` แข่งกับ #ep-auth.signup ด้วย email เดียวกัน) ทั้งสองฝ่ายอาจผ่านข้อ 3 พร้อมกันได้. ตัวตัดสินคือ unique constraint ของ `user.email` (`user_email_unique`): ฝ่ายที่ insert user ไม่สำเร็จเพราะ unique violation นี้ต้อง rollback **ทั้ง transaction** แล้วตอบ `CONFLICT` (เหมือน #ep-auth.signup) — ห้ามกลายเป็น `INTERNAL` และไม่มี user, membership, การใช้คำเชิญ (`accepted_at` ยังเป็น null) หรือ audit ค้างจากฝ่ายที่แพ้; ฝ่ายที่ชนะไม่ได้รับผลกระทบ. ไม่เพิ่ม error code
 
 <a id="contract-branch-hours-get"></a>
 ### `branch.hours.get`
