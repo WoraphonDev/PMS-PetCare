@@ -24,9 +24,12 @@ test("approval anchors come only from exact workflow-bot markers, newest id acro
 test("workflow uses stored approval SHA, not the previous push, and pins eligible head", () => {
   const workflow = readFileSync(join(SCRIPTS, "..", ".github/workflows/auto-merge.yml"), "utf8");
   assert.doesNotMatch(workflow, /github\.event\.before/);
-  assert.match(workflow, /scripts\/approved-head\.mjs/);
-  assert.match(workflow, /same-pr-diff\.sh "\$APPROVED" "\$AFTER"/);
+  const proof = readFileSync(join(SCRIPTS, "check-approval-proof.sh"), "utf8");
+  assert.match(proof, /scripts\/approved-head\.mjs/);
+  assert.match(proof, /same-pr-diff\.sh "\$approved" "\$AFTER"/);
   assert.match(workflow, /--match-head-commit "\$APPROVED"/);
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
-  assert.match(workflow, /if: always\(\) && steps.same.outputs.same != 'true'/);
+  assert.match(workflow, / {2}approval-proof:/);
+  assert.match(workflow, /needs: approval-proof/);
+  assert.match(workflow, /types: \[opened, labeled, unlabeled, synchronize, reopened\]/);
 });

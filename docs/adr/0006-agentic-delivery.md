@@ -45,6 +45,7 @@
 - เมื่อติด `agent-approved`: ตรวจเองซ้ำว่า PR มาจาก repo นี้, base = `main`, branch `t-NNNN-*`, การ์ดบน `main` มี `owner: agent` และ `human_review: false`
   → เปิด GitHub auto-merge (squash) ซึ่งยังรอ required check `verify` และ conversation ที่ resolve ครบตาม branch protection
   ไม่ผ่านเงื่อนไข → ถอด label และ comment เหตุผล
+- `approval-proof` เป็น required check แยกจาก `verify` ผูกกับ head ของ PR แต่ละ SHA จึงบล็อก push ใหม่แม้ reset workflow ยังอยู่ในคิว การ์ด agent ที่ยังไม่ review/ติด label จะยังไม่ผ่าน proof; รอ `verify` ผ่าน → review CLEAN → ติด label จึงรัน proof อีกครั้ง โดย process PR และการ์ด human-review ใช้ human merge ตามเดิม
 - push ใหม่หลังติด label → ถอด label + ยกเลิก auto-merge ยกเว้นเป็น merge commit เดียวที่ parent แรกตรง SHA ที่ workflow บันทึกตอนอนุมัติจริง (bot marker ไม่ใช่ SHA ของ push ก่อนหน้า), parent ที่สองอยู่ในประวัติ main และ tree ตรงผล clean merge ของ Git ทุก byte (`scripts/same-pr-diff.sh`); conflict/manual edit/rebase/หลักฐานไม่ครบ → review ใหม่เสมอ ไม่มีการอนุมัติหรือเปิด auto-merge ใหม่จากขั้นตอนนี้ และ `verify` ยังต้องผ่านบน head ใหม่
 
 มนุษย์ merge เอง: การ์ด `human_review: true`, และ PR ที่ไม่ใช่การ์ด (spec / ADR / AGENTS.md / CI / scripts) เพราะเป็นการเปลี่ยนกติกา
