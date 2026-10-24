@@ -42,7 +42,8 @@ T-0008 กับ T-0009 ทำขนานกันได้
 | [T-0014](T-0014.md) | `branch.paymentSettings.update` (F08) — spec §13; T-0014-01…04 answered (02: check-digit formula is a human-approved PMS policy); human merge of card + §13 before implementation | ✓ |
 | [T-0015](T-0015.md) | `staff.list` (F02 branch-scoped), `staff.invite` + re-invite, `staff.invitation.revoke` (F03, F05) + shared pieces (seat count/locks, token, email, identity read API) — spec §14; T-0015-01…07 answered; human merge of card + §14 before implementation | |
 | [T-0042](T-0042.md) | `invitation.accept` for logged-in users with a verified email (§14 #contract-invitation-accept) + all accept races; depends T-0015 | |
-| *(unnumbered — follow-up of T-0015-06; number given by the human)* | invite-bound signup: user-only signup tied to an invitation token, no new shop (#rule-invite-signup-followup); needs a spec amendment first — never `auth.signup` as a workaround | |
+| [T-0044](T-0044.md) | follow-up of T-0015-06 (number assigned by Zo 2026-10-24): `invitation.preview` + invite-bound signup (user only, no new shop — #rule-invite-signup-followup); T-0044-01, -02 answered (A); spec §19 in PR #66 (human merge first) — never `auth.signup` as a workaround; depends T-0042 | |
+| [T-0049](T-0049.md) | `branch.hours.get` (`GET /branches/{branchId}/hours`) for the hours tab — T-0046-01 (A), number assigned 2026-10-24; spec §19 in PR #66; depends T-0013 | |
 | [T-0016](T-0016.md) | `staff.account.create`, `staff.password.reset` (F09) — spec §15; T-0016-01…05 answered; human merge of card + §15 before implementation; depends T-0015 | |
 | [T-0017](T-0017.md) | `staff.update`, `staff.remove` (F01, F02, F09) — spec §16; T-0017-01…03 answered; caller re-check (#rule-staff-caller-recheck) approved; depends T-0015 (+ §15 roles) | |
 | [T-0018](T-0018.md) | `audit.list`, `subscription.get` + `audit_log` index migration — spec §17; T-0018-01…03 answered; depends T-0015 | |
@@ -56,13 +57,20 @@ T-0008 กับ T-0009 ทำขนานกันได้
 |---|---|
 | [T-0043](T-0043.md) | `packages/api-client` (typed fetch client, `me.get`) + `packages/ui` (`cn`, `Button`) — split out of T-0022 (T-0022-03 A); depends T-0001, T-0007; **merge before T-0022** |
 | [T-0022](T-0022.md) | `apps/pms-web` app skeleton: Vite + React + TanStack Router/Query + Tailwind + PWA (API bypass, update prompt) + typed i18n th; T-0022-01…03 answered (A); depends T-0043 |
-| T-0023 | auth screens + `/verify-email` fragment → clear history → POST JSON; resend/recovery/invalid/expired/replaced; 201 ไม่อ้าง confirmed delivery; depends T-0022, T-0011, T-0035, T-0036; release gate signup |
-| T-0024 | app shell: org/branch switcher, nav ตามสิทธิ์, แถบร้านถูกระงับ |
-| T-0025 | settings: org, branches, branch (ข้อมูล/เวลา/วันหยุด/การชำระเงิน) |
-| T-0026 | staff: list, invite, create account, reset password, edit/remove, invite accept · `scr-invite-accept` reads the token from the fragment `/invite#token=` (§14); logged-in accept depends T-0015, T-0042; invitees **without** an account depend on the invite-bound signup follow-up |
-| T-0027 | audit, subscription, account security |
-| T-0028 | platform admin screens |
-| T-0029 | Playwright E2E: signup → verify email → login owner → เชิญพนักงาน → login พนักงาน → ตั้งค่าสาขา |
+| [T-0023](T-0023.md) | signup + `/verify-email` fragment → clear history → POST JSON; resend/invalid/network states; login; shared form errors + error copy; 201 ไม่อ้าง confirmed delivery; depends T-0022, T-0011, T-0035, T-0036; **release gate signup** |
+| [T-0045](T-0045.md) | 2FA challenge, forced password change, forgot / reset password (split from T-0023); depends T-0023 |
+| [T-0024](T-0024.md) | app shell: session guard, org/branch switcher, nav ตามสิทธิ์, แถบร้านถูกระงับ, logout; T-0024-01 answered (A): web imports `@app/domain` — ADR-0002 amendment in PR #66 (human merge first); depends T-0023, T-0045 |
+| [T-0025](T-0025.md) | settings: org, branch list + create, branch detail (info tab); depends T-0024 |
+| [T-0046](T-0046.md) | branch hours / closures / payment tabs (split from T-0025); T-0046-01 answered (A): hours read via T-0049; human_review ✓ (PromptPay); depends T-0025, T-0049 |
+| [T-0026](T-0026.md) | staff: list, invite, revoke, create managed account; depends T-0025 |
+| [T-0047](T-0047.md) | staff edit / remove / reset password + `/invite#token=` accept incl. sign-up (split from T-0026); depends T-0026, T-0042, **T-0044** |
+| [T-0027](T-0027.md) | audit, subscription; human_review ✓ (price); depends T-0026 (reuses its `staff.list` and T-0025's `subscription.get`) |
+| [T-0048](T-0048.md) | account security: change password, 2FA enable (QR + backup codes) / disable (split from T-0027); depends T-0024, T-0045 |
+| [T-0028](T-0028.md) | platform admin screens; human_review ✓ (plan change); depends T-0024, T-0027, T-0048 |
+| [T-0029](T-0029.md) | Playwright E2E: signup → verify email → login owner → เชิญพนักงาน → พนักงานสมัครจากคำเชิญ + login → ตั้งค่าสาขา; T-0029-01 answered (A): runs locally, result in the PR, CI job added by a human later; depends T-0023…T-0026, T-0044, T-0047 |
+
+T-0045…T-0048 were split out of T-0023 / T-0025 / T-0026 / T-0027 to stay under 600 lines; numbers assigned by Zo on 2026-10-24.
+Suggested order: T-0043 → T-0022 → T-0023 → T-0045 → T-0024 → T-0025 → T-0026 → T-0027 → T-0028. In parallel once their dependencies merge: T-0048 (after T-0024 + T-0045), T-0049 (API, after PR #66) → T-0046 (after T-0025 + T-0049), T-0044 (API, after PR #66) → T-0047 (after T-0026 + T-0044). T-0029 last.
 
 ## Wave 5 — deploy (สร้างร่วมกับมนุษย์: secrets/โฮสต์)
 
