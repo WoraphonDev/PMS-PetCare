@@ -52,8 +52,9 @@ describe("_app guard (T-0024)", () => {
     expect(existsSync(src("routes/index.tsx"))).toBe(false);
     expect(existsSync(src("routes/_app.index.tsx"))).toBe(true);
     const tree = readFileSync(src("routeTree.gen.ts"), "utf8");
-    // Route definitions (`.update({ path })`) — only _app.index defines `/`.
-    expect(tree.match(/^\s+path: '\/',$/gm)).toHaveLength(1);
+    // Top-level route definitions (`.update({ path, getParentRoute })`) — only _app.index defines `/`. Nested index
+    // routes (e.g. a branch's info tab) also have a relative `path: '/'`, so they are not counted (T-0025-01 A).
+    expect(tree.match(/path: '\/',\n\s+getParentRoute: \(\) => (rootRouteImport|AppRoute),/g)).toHaveLength(1);
   });
 
   it("no membership: noOrg text; platform link only for a platform admin", async () => {
