@@ -4,4 +4,15 @@ export {
   type BootstrapOrganizationResult,
   bootstrapOrganization,
 } from "./bootstrap";
+export {
+  type OrgPosition,
+  type OrgSearchRow,
+  type OrgStatus,
+  type OrgUsage,
+  orgWithOwners,
+  recordOrgViewed,
+  searchOrgs,
+  setOrgStatus,
+  usageOf,
+} from "./platform-access";
 export { branchCount, memberNames, staffSeats } from "./public-reads";

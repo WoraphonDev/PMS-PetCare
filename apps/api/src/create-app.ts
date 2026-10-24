@@ -13,6 +13,7 @@ import type { Config } from "./config";
 import { AuditModule } from "./modules/audit/audit.module";
 import { IdentityModule } from "./modules/identity";
 import { OrgModule } from "./modules/org/org.module";
+import { PlatformModule } from "./modules/platform/platform.module";
 import { SubscriptionModule } from "./modules/subscription/subscription.module";
 import { SystemModule } from "./modules/system/system.module";
 
@@ -58,6 +59,7 @@ function rootModule(config: Config, infra: Infra, ownsInfra: boolean, extra: Arr
       AuditModule,
       IdentityModule,
       OrgModule,
+      PlatformModule,
       SubscriptionModule,
       SystemModule,
       ...extra,

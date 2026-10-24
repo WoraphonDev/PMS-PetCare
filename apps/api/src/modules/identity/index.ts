@@ -1,5 +1,5 @@
 // Public API of identity (ADR-0002); request policy wiring lives here to keep common independent of identity internals.
-import type { Db } from "@app/db";
+import { type Db, type Tx, transactionQuery } from "@app/db";
 import { Global, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { CLOCK, type Clock } from "../../common/context";
@@ -68,3 +68,13 @@ export { type StaffProfile, staffProfiles, usersByEmail } from "./staff-director
 export { hasTwoFactorSession, platformSession } from "./two-factor-session";
 export { captureVerificationAfterCommit } from "./verification-collector";
 export { captureSignupVerification } from "./verification-email";
+
+/**
+ * foundation#contract-platform-org-read (T-0019-01 B): ids of real-email users whose email contains `q`, ignoring case.
+ * Managed accounts never match — their `<id>@managed.invalid` placeholder is not an address. Platform connection only.
+ */
+export async function userIdsByEmailPart(tx: Tx, q: string): Promise<string[]> {
+  const { rows } = await transactionQuery(tx)<{ id: string }>`
+    SELECT id FROM "user" WHERE NOT is_managed AND position(lower(${q}::text) IN lower(email)) > 0`;
+  return rows.map((r) => r.id);
+}
