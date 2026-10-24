@@ -321,10 +321,13 @@ Endpoint ที่อยู่ในร้านต้องส่ง header `X-
 | <a id="ep-branch.closures"></a><a id="ep-branch.closure.create"></a>`branch.closure.create` | `POST /branches/{branchId}/closures` | `branch.update` | 201 Closure · outbox `branch.hours_changed` · #contract-branch-closures |
 | <a id="ep-branch.closure.delete"></a>`branch.closure.delete` | `DELETE /branches/{branchId}/closures/{closureId}` | `branch.update` | 204 ไม่มี body · outbox `branch.hours_changed` |
 | <a id="ep-branch.closure.list"></a>`branch.closure.list` | `GET /branches/{branchId}/closures` | `org.settings.read` | 200 `{ items: Closure[] }` · ไม่มี event |
+| <a id="ep-branch.hours.get"></a>`branch.hours.get` | `GET /branches/{branchId}/hours` | `org.settings.read` | 200 projection เดียวกับ #contract-branch-hours · ไม่มี event · #contract-branch-hours-get (§19) |
 | <a id="ep-staff.list"></a>`staff.list` | `GET /staff` | `staff.read` | membership + คำเชิญที่ค้าง · #contract-staff-list |
 | <a id="ep-staff.invite"></a>`staff.invite` | `POST /staff/invitations` | `staff.invite` | `{ email, role, branchIds }` · F02, F03, F05 · ส่งอีเมล · audit `staff.invited` · #contract-staff-invite |
 | <a id="ep-staff.invitation.revoke"></a>`staff.invitation.revoke` | `DELETE /staff/invitations/{invitationId}` | `staff.invite` | 204 · #contract-staff-invitation-revoke |
 | <a id="ep-invitation.accept"></a>`invitation.accept` | `POST /invitations/accept` | user ที่ login แล้ว (สมัครใหม่ใน flow เดียวกัน: follow-up #rule-invite-signup-followup) | `{ token }` · F03 · audit `staff.joined` · #contract-invitation-accept |
+| <a id="ep-invitation.preview"></a>`invitation.preview` | `POST /invitations/preview` | public | `{ token }` → ชื่อร้าน, role, สาขา, email ที่ถูกเชิญ, วันหมดอายุ · ไม่เขียน · #contract-invitation-preview (§19) |
+| <a id="ep-auth.signup_with_invitation"></a>`auth.signupWithInvitation` | `POST /auth/signup/invitation` | public | `{ token, displayName, password }` → สร้าง user (ไม่สร้างร้าน) + เข้าร่วมร้านตามคำเชิญ · 201 ไม่มี session · audit `staff.joined` · #contract-signup-with-invitation (§19) |
 | <a id="ep-staff.account.create"></a>`staff.account.create` | `POST /staff/accounts` | `staff.invite` | `{ displayName, username, password, role, branchIds }` · F02, F05, F09 · `CONFLICT` เมื่อ username ซ้ำ · audit `staff.account_created` · #contract-staff-account-create |
 | <a id="ep-staff.password.reset"></a>`staff.password.reset` | `PUT /staff/{membershipId}/password` | `staff.update` | `{ newPassword }` · F09 · audit `staff.password_reset` · #contract-staff-password-reset |
 | <a id="ep-staff.update"></a>`staff.update` | `PATCH /staff/{membershipId}` | `staff.update` | `{ role?, branchIds?, displayName? }` · F01, F02, ¹ · audit `staff.role_changed` · #contract-staff-update |
@@ -745,6 +748,7 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 ### ผู้รับเชิญที่ยังไม่มีบัญชี (follow-up)
 
 - ข้อความ "หรือสมัครใหม่ใน flow เดียวกัน" ใน #ep-invitation.accept และ "สมัครแล้วรับคำเชิญ" ใน #scr-invite-accept ยัง **ไม่มีผล** จนกว่าจะมี spec amendment สำหรับการสมัครที่ผูกกับ token คำเชิญ (สร้างเฉพาะ user ไม่สร้างร้าน) และการ์ดที่มนุษย์ออกเลขให้
+- **อัปเดต 2026-10-24:** amendment นี้คือ §19 (#contract-invitation-preview, #contract-signup-with-invitation) และการ์ด T-0044 — มีผลเมื่อมนุษย์ merge §19
 - ห้ามใช้ `auth.signup` (สร้างร้านใหม่เสมอ) เป็นทางแก้ชั่วคราว
 - T-0026 ส่ง flow สำหรับผู้ที่ login แล้วได้ก่อน; flow ผู้ที่ยังไม่มีบัญชีขึ้นกับ follow-up นี้
 
@@ -908,3 +912,41 @@ T-0023 ต้องมี verification fragment landing/resend/recovery/error st
 ### `platform.plan.list`
 
 - `GET /platform/plans` · platform admin → 200 `{ items: [{ code, name, maxBranches, maxStaff, priceSatangPerMonth, isActive }] }` เรียงตาม `code`; รวมแพ็กเกจที่ปิดใช้ (บอกด้วย `isActive`)
+
+## 19. Invitation preview, invite-bound signup and branch hours read (T-0044, T-0049)
+
+สถานะ: business decisions **อนุมัติโดยมนุษย์ในแชท 2026-10-24** — T-0044-01 (A), T-0044-02 (A), T-0046-01 (A) บันทึกในไฟล์ `docs/questions/`. ข้อความนี้มีผลเมื่อมนุษย์ merge เท่านั้น. เพิ่ม endpoint `invitation.preview`, `auth.signupWithInvitation` (T-0044) และ `branch.hours.get` (T-0049); ไม่เพิ่ม error code, permission, audit action, outbox event, คอลัมน์ หรือ migration
+
+<a id="contract-invitation-preview"></a>
+### `invitation.preview`
+
+- `POST /invitations/preview` · public (ไม่ต้องมี session และ `X-Org-Id`) · strict body `{ token }` (string 1–200) · token อยู่ใน JSON body เท่านั้นตาม #rule-invitation-token
+- ลำดับการตรวจ (ไม่ล็อก ไม่เขียน): body ผิด → `VALIDATION_FAILED`; token ผิดรูปแบบ → `INVITATION_INVALID`; อ่านคำเชิญด้วย hash ใน `withTenant(orgId จาก token)`: ไม่พบ (รวม org ที่ไม่มีจริง), ใช้แล้ว, ยกเลิกแล้ว หรือหมดอายุ (`expires_at <= now`) → `INVITATION_INVALID`; org `suspended` → `ORG_SUSPENDED`
+- ตอบ 200 `{ orgDisplayName, role, branchNames, email, expiresAt }` — `branchNames` เฉพาะสาขาของคำเชิญนี้ เรียงตามชื่อ (role ทั้ง org = `[]`); `email` = email ในคำเชิญ (ผู้ถือ token ได้รับคำเชิญที่ email นั้นอยู่แล้ว)
+- **ไม่บอก** ว่า email นี้มีบัญชีอยู่แล้วหรือไม่; ไม่มี audit; ไม่มี rate limit เพิ่ม (token สุ่ม 256 bit); ไม่ log token
+
+<a id="contract-signup-with-invitation"></a>
+### `auth.signupWithInvitation`
+
+- `POST /auth/signup/invitation` · public · strict body `{ token, displayName, password }` — `token` 1–200; `displayName` trim 1–100 (นับแบบ `char_length`); `password` 10–128 ไม่ trim (F11); ไม่รับ `email` (ใช้ email ของคำเชิญ)
+- abuse limit: 5 ครั้งที่ schema ถูก / 3600 วินาที / trusted IP, key prefix `signup-invite` แยกจาก signup/login/forgot/resend; นับก่อน transaction แบบ atomic เหมือน #rule-signup-abuse; ครั้งที่ 6 เป็นต้นไป → `RATE_LIMITED`; Valkey ล้มเหลว → `INTERNAL` (fail closed) ก่อนเขียน DB; body ผิดไม่นับ
+- transaction เดียว ลำดับการตรวจ (check แรกที่ไม่ผ่านเป็นคำตอบ):
+  1. token ผิดรูปแบบ → `INVITATION_INVALID`
+  2. ตรวจคำเชิญเหมือน #contract-invitation-accept ข้อ 6–10 (preflight, lock subscription, lock คำเชิญแล้วตรวจซ้ำ, อ่าน `organization.status` ซ้ำ) **ยกเว้นการเทียบ email กับ user** (ยังไม่มี user — email ของบัญชีใหม่คือ email ของคำเชิญ) → `INVITATION_INVALID` / `ORG_SUSPENDED` / `INTERNAL` (ไม่มี subscription); ข้อ 11 (membership เดิม) ไม่เกิดเพราะเป็น user ใหม่
+  3. มีบัญชีที่ใช้ email นี้อยู่แล้ว (ไม่สนตัวพิมพ์ รวมบัญชีที่ยังไม่ verify) → `CONFLICT` — ให้ login แล้วใช้ #contract-invitation-accept แทน; ข้อนี้เป็นการตรวจล่วงหน้าเท่านั้น ไม่ใช่สิ่งที่กันการแข่ง (ดู #rule-signup-invite-email-race)
+  4. สร้าง user ผ่าน public service ของ `identity`: `email` = email ของคำเชิญ (ตัวพิมพ์เล็ก), `name` = `displayName`, `emailVerified = true` (token ที่ส่งไปยัง email นั้นพิสูจน์การเป็นเจ้าของ), `isManaged = false`, `mustChangePassword = false`
+  5. เขียนการรับคำเชิญเหมือน #contract-invitation-accept (insert membership + `membership_branch`, `display_name = displayName`, คำเชิญ `accepted_at = now`) และ audit `staff.joined` (actor = user ใหม่, `before` null, `after { role, branchIds, invitationId }`)
+- ไม่ตรวจ `max_staff` (คำเชิญที่ค้างนับไว้แล้ว — #rule-staff-capacity); ไม่ส่งอีเมล; ไม่มี outbox
+- ตอบ **201** `{ orgId, role }` ไม่มี session/cookie — ผู้ใช้ login ต่อด้วย #ep-auth.login (F10 ใช้ตามปกติ)
+- ล้มเหลวขั้นใดก็ตาม → rollback ทั้งหมด (ไม่มี user, membership, การใช้คำเชิญ หรือ audit ค้าง); แข่งกับ revoke หรือการสมัคร/รับคำเชิญด้วย token เดียวกัน: ผู้ได้ lock คำเชิญก่อนชนะ อีกฝ่าย `INVITATION_INVALID`
+
+<a id="rule-signup-invite-email-race"></a>
+- **email ซ้ำที่แข่งกัน:** lock คำเชิญ serialize เฉพาะ request ที่ใช้ **คำเชิญใบเดียวกัน** — ไม่กันการแข่ง**ข้ามคำเชิญ** (เช่น สองร้านเชิญ email เดียวกัน แล้วสมัครผ่านทั้งสองลิงก์พร้อมกัน) และ**ข้าม flow** (`auth.signupWithInvitation` แข่งกับ #ep-auth.signup ด้วย email เดียวกัน) ทั้งสองฝ่ายอาจผ่านข้อ 3 พร้อมกันได้. ตัวตัดสินคือ unique constraint ของ `user.email` (`user_email_unique`): ฝ่ายที่ insert user ไม่สำเร็จเพราะ unique violation นี้ต้อง rollback **ทั้ง transaction** แล้วตอบ `CONFLICT` (เหมือน #ep-auth.signup) — ห้ามกลายเป็น `INTERNAL` และไม่มี user, membership, การใช้คำเชิญ (`accepted_at` ยังเป็น null) หรือ audit ค้างจากฝ่ายที่แพ้; ฝ่ายที่ชนะไม่ได้รับผลกระทบ. ไม่เพิ่ม error code
+
+<a id="contract-branch-hours-get"></a>
+### `branch.hours.get`
+
+- `GET /branches/{branchId}/hours` · `org.settings.read` · ไม่มี body/query (ตามกติกา GET เดิม)
+- `branchId` ไม่ใช่ UUID → `VALIDATION_FAILED`; ไม่พบ เป็นของ org อื่น หรือ role ระดับสาขาที่ไม่ได้อยู่สาขานั้น (F02) → `NOT_FOUND`
+- ตอบ 200 projection เดียวกับคำตอบของ #contract-branch-hours: `{ items: [{ weekday, opensAt, closesAt }] }` เรียง weekday asc, เวลาเป็น `HH:mm` หรือ null ทั้งคู่; ไม่ครบ 7 วันตาม invariant → `INTERNAL` (ไม่ซ่อม)
+- อ่านได้แม้ร้านถูกระงับ (F04); ไม่ lock, ไม่ bump version, ไม่มี audit/outbox

@@ -50,7 +50,7 @@ packages/
 1. module เรียก module อื่น **ผ่าน public service ที่ export จาก `index.ts` เท่านั้น** — ห้าม import ไฟล์ภายในหรือ query ตารางของ module อื่น
 2. งาน async ข้าม module (เช่น นัดยืนยันแล้ว → แจ้งเตือน, ห้องว่างเปลี่ยน → Channel) ผ่าน **domain event (outbox)**
 3. ทุกตารางมี module เจ้าของเดียว
-4. ทิศทาง: `apps/*-web` → `api-client`/`contracts`/`ui` · `apps/api` → `db`, `domain`, `contracts` · `domain` → ไม่มี
+4. ทิศทาง: `apps/*-web` → `api-client`/`contracts`/`ui`/`domain` (`domain` เป็นกฎล้วน ไม่มี I/O จึงใช้ใน browser ได้ — เช่นตารางสิทธิ์ ใช้แค่ซ่อน/แสดง UI โดย API ยังบังคับสิทธิ์เสมอ; T-0024-01 A, 2026-10-24) · `apps/api` → `db`, `domain`, `contracts` · `domain` → ไม่มี
 5. ขอบเขตบังคับด้วย lint rule / architecture test (สร้างในการ์ดแรก ๆ)
 
 ## Consequences
