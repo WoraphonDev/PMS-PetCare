@@ -4,11 +4,14 @@ type Messages = Record<string, Record<string, string>>;
 type Key<M extends Messages> = { [N in keyof M & string]: `${N}.${keyof M[N] & string}` }[keyof M & string];
 type Text<M extends Messages, K> = K extends `${infer N}.${infer T}` ? M[N][T] : never;
 type Placeholders<S> = S extends `${string}{${infer P}}${infer Rest}` ? P | Placeholders<Rest> : never;
-type Values<S> = [Placeholders<S>] extends [never] ? [] : [values: { [P in Placeholders<S>]: string | number }];
+// `V` is the object actually passed, so extra keys are rejected even from a variable or a spread (not only literals).
+type Values<S, V> = [Placeholders<S>] extends [never]
+  ? []
+  : [values: V & { [P in Placeholders<S>]: string | number } & { [X in Exclude<keyof V, Placeholders<S>>]: never }];
 
 /** Typed lookup: unknown keys, and missing / extra / misnamed / wrongly typed `{placeholder}` values, fail typecheck. */
 export function createTranslator<const M extends Messages>(messages: M) {
-  return <K extends Key<M>>(key: K, ...[values]: Values<Text<M, K>>): string => {
+  return <K extends Key<M>, V extends object = object>(key: K, ...[values]: Values<Text<M, K>, V>): string => {
     const dot = key.indexOf(".");
     const text = messages[key.slice(0, dot)]?.[key.slice(dot + 1)] ?? key;
     if (!values) return text;

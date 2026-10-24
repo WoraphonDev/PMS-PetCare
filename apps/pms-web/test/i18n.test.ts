@@ -44,6 +44,17 @@ describe("t (T-0022-01 A)", () => {
       tx("common.hi");
       // @ts-expect-error unknown key in the app's own messages
       t("common.nope");
+      const withExtra = { used: 1, limit: 3, extra: 1 };
+      // @ts-expect-error extra placeholder value passed through a variable
+      tx("scr-x.usage", withExtra);
+      const base = { used: 1, limit: 3 };
+      // @ts-expect-error extra placeholder value added by a spread
+      tx("scr-x.usage", { ...base, ...{ extra: "x" } });
+      const exact = { used: 1, limit: 3 };
+      tx("scr-x.usage", exact);
+      const missing = { used: 1 };
+      // @ts-expect-error missing placeholder value passed through a variable
+      tx("scr-x.usage", missing);
     };
     expect(typeChecks).toBeTypeOf("function");
   });
