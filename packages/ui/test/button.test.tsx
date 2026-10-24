@@ -69,4 +69,19 @@ describe("Button", () => {
     expect(link).not.toHaveAttribute("type");
     expect(screen.queryByRole("button")).toBeNull();
   });
+
+  it("asChild forwards an explicit type to the child (a Cancel button in a form must not submit)", () => {
+    const onSubmit = vi.fn((e: { preventDefault(): void }) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <Button asChild type="button" variant="ghost">
+          <button>ยกเลิก</button>
+        </Button>
+      </form>,
+    );
+    const button = screen.getByRole("button", { name: "ยกเลิก" });
+    expect(button).toHaveAttribute("type", "button");
+    button.click();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });

@@ -32,6 +32,7 @@ export type ButtonProps = ComponentProps<"button"> & VariantProps<typeof buttonV
 /** `asChild` renders the single child (e.g. a link) with the button styles instead of a `<button>`. */
 export function Button({ className, variant, size, asChild = false, type, ...props }: ButtonProps) {
   const classes = cn(buttonVariants({ variant, size }), className);
-  if (asChild) return <Slot className={classes} {...props} />;
+  // An explicit `type` is kept on the child (e.g. a Cancel `<button>` in a form); none is added when omitted.
+  if (asChild) return <Slot className={classes} {...(type === undefined ? {} : { type })} {...props} />;
   return <button type={type ?? "button"} className={classes} {...props} />;
 }
