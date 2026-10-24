@@ -7,7 +7,28 @@ import type { OrgPosition } from "../org";
  * not decode to a position is VALIDATION_FAILED.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const PG_TIMESTAMPTZ = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,6})?[+-]\d{2}(:\d{2})?$/;
+const PG_TIMESTAMPTZ = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?[+-](\d{2})(?::(\d{2}))?$/;
+
+/** Postgres' `timestamptz` text, checked part by part: Date.parse would roll 31 February over into March. */
+function isInstant(text: string): boolean {
+  const m = PG_TIMESTAMPTZ.exec(text);
+  if (!m) return false;
+  const [year, month, day, hour, minute, second, offsetHours, offsetMinutes] = m.slice(1).map((part) => Number(part ?? 0));
+  if (year === undefined || month === undefined || day === undefined) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
+  // Postgres refuses year 0000 and offsets beyond ±15:59.
+  return (
+    year >= 1 &&
+    day >= 1 &&
+    day <= daysInMonth &&
+    Number(hour) <= 23 &&
+    Number(minute) <= 59 &&
+    Number(second) <= 59 &&
+    Number(offsetHours) <= 15 &&
+    Number(offsetMinutes) <= 59
+  );
+}
 
 export function encodeCursor(position: OrgPosition): string {
   return Buffer.from(JSON.stringify([position.createdAt, position.id])).toString("base64url");
@@ -23,9 +44,7 @@ export function decodeCursor(cursor: string): OrgPosition {
   }
   if (!Array.isArray(decoded) || decoded.length !== 2) throw invalid();
   const [createdAt, id] = decoded as unknown[];
-  // Date.parse needs an ISO offset ("+00" → "+00:00"); it rejects impossible calendar values Postgres would refuse.
-  const iso = typeof createdAt === "string" ? createdAt.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00") : "";
-  if (typeof createdAt !== "string" || !PG_TIMESTAMPTZ.test(createdAt) || Number.isNaN(Date.parse(iso))) throw invalid();
+  if (typeof createdAt !== "string" || !isInstant(createdAt)) throw invalid();
   if (typeof id !== "string" || !UUID.test(id)) throw invalid();
   return { createdAt, id };
 }

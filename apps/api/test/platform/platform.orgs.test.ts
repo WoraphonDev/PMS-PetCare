@@ -252,6 +252,16 @@ describe("platform.org.list", () => {
       ["?cursor=", "cursor"],
       ["?cursor=not-a-cursor", "cursor"],
       [`?cursor=${Buffer.from(JSON.stringify(["2031-01-01", "x"])).toString("base64url")}`, "cursor"],
+      // Shaped like Postgres' text but not a real instant: Postgres would refuse the cast (never INTERNAL).
+      ...[
+        "2031-02-31 00:00:00+00",
+        "2030-02-29 00:00:00+00",
+        "2031-13-01 00:00:00+00",
+        "2031-05-06 24:00:00+00",
+        "2031-05-06 00:60:00+00",
+        "0000-01-01 00:00:00+00",
+        "2031-05-06 00:00:00+16",
+      ].map((at) => [`?cursor=${Buffer.from(JSON.stringify([at, randomUUID()])).toString("base64url")}`, "cursor"] as const),
       ["?limit=10", "limit"],
       ["?orgId=x", "orgId"],
     ] as const) {
