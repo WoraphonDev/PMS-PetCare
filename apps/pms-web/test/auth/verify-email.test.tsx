@@ -67,6 +67,15 @@ describe("scr-auth-verify-email (/verify-email)", () => {
     expect(request(1)).toEqual({ url: "/api/v1/auth/email/verify", body: { token: TOKEN } });
   });
 
+  it("an empty #token= is still posted (fragment cleared first) and the API's VALIDATION_FAILED shows invalid + resend", async () => {
+    const { fetch, request, replaceState } = openWith("#token=", apiError(400, "VALIDATION_FAILED", { fields: { token: ["Too small"] } }));
+    expect(await screen.findByText(v.invalid)).toBeInTheDocument();
+    expect(replaceState.mock.invocationCallOrder[0]).toBeLessThan(fetch.mock.invocationCallOrder[0] as number);
+    expect(request(0)).toEqual({ url: "/api/v1/auth/email/verify", body: { token: "" } });
+    expect(window.location.hash).toBe("");
+    expect(screen.getByRole("button", { name: v.resendSubmit })).toBeInTheDocument();
+  });
+
   it("no fragment → resend form only, no verify request", async () => {
     const { fetch } = openWith("");
     expect(await screen.findByRole("heading", { name: v.resendTitle })).toBeInTheDocument();

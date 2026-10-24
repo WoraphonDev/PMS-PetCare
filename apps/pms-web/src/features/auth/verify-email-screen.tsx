@@ -9,14 +9,15 @@ import { useApi } from "./use-api";
 
 type State = "pending" | "success" | "invalid" | "network" | "noToken";
 
-const tokenFromHash = (hash: string) => new URLSearchParams(hash.replace(/^#/, "")).get("token") || null;
+// null = no `token=` in the fragment; "" = present but empty — still posted, so the API answers (invalid).
+const tokenFromHash = (hash: string) => new URLSearchParams(hash.replace(/^#/, "")).get("token");
 
 // foundation#scr-auth-verify-email: the token arrives in the fragment, is cleared from history before anything else,
 // kept in memory only and sent as JSON. It is never logged or put in a URL.
 export function VerifyEmailScreen() {
   const api = useApi();
   const [token] = useState(() => tokenFromHash(window.location.hash));
-  const [state, setState] = useState<State>(token ? "pending" : "noToken");
+  const [state, setState] = useState<State>(token !== null ? "pending" : "noToken");
   const started = useRef(false);
 
   async function verify(value: string) {
@@ -35,7 +36,7 @@ export function VerifyEmailScreen() {
     if (started.current) return;
     started.current = true;
     if (window.location.hash) window.history.replaceState(null, "", "/verify-email");
-    if (token) void verify(token);
+    if (token !== null) void verify(token);
   }, []);
 
   return (
@@ -53,7 +54,7 @@ export function VerifyEmailScreen() {
       {state === "network" && (
         <>
           <p role="alert">{t("scr-auth-verify-email.network")}</p>
-          <Button variant="outline" onClick={() => token && void verify(token)}>
+          <Button variant="outline" onClick={() => token !== null && void verify(token)}>
             {t("scr-auth-verify-email.retry")}
           </Button>
         </>
