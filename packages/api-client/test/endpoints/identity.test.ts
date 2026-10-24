@@ -15,6 +15,7 @@ import {
   authEmailVerificationResend,
   authEmailVerify,
   authLogin,
+  authLogout,
   authPasswordChange,
   authPasswordForgot,
   authPasswordReset,
@@ -189,5 +190,23 @@ describe("2FA / password descriptors (T-0045)", () => {
     expect(sent()).toEqual({ url, method: "POST", body: JSON.stringify(body) });
     expect(endpoint.body).toBe(schema);
     expect(endpoint.response).toBeNull();
+  });
+});
+
+describe("auth.logout (T-0024, foundation#ep-auth.logout)", () => {
+  it("POST /auth/logout with no body, no Content-Type and no X-Org-Id → 204 undefined", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+    const api = createApiClient({ baseUrl: "/api/v1", fetch });
+
+    await expect(api.request(authLogout)).resolves.toBeUndefined();
+
+    const [url, init] = fetch.mock.calls[0] ?? [];
+    expect(url).toBe("/api/v1/auth/logout");
+    expect(init?.method).toBe("POST");
+    expect(init?.credentials).toBe("include");
+    expect(init?.body).toBeUndefined();
+    expect(new Headers(init?.headers).get("content-type")).toBeNull();
+    expect(new Headers(init?.headers).get("x-org-id")).toBeNull();
+    expect(authLogout.response).toBeNull();
   });
 });

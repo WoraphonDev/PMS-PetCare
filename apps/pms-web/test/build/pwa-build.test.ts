@@ -48,7 +48,8 @@ describe("built PWA", () => {
     expect(sw).toMatch(
       /registerRoute\(\s*new \w+\.NavigationRoute\(\s*\w+\.createHandlerBoundToURL\("\/index\.html"\)\s*,\s*\{\s*denylist:\s*\[\s*\/\^\\\/api\(\\\/\|\$\)\/\s*\]\s*\}\s*\)\s*\)/,
     );
-    expect(sw).not.toMatch(/runtime|NetworkFirst|CacheFirst|StaleWhileRevalidate/);
+    // Workbox runtime-caching API, not the bare word "runtime" (a chunk may be named jsx-runtime-*.js — T-0024-03 A).
+    expect(sw).not.toMatch(/\bNetworkFirst\b|\bCacheFirst\b|\bStaleWhileRevalidate\b|\bNetworkOnly\b|\bCacheOnly\b|runtimeCaching/);
   });
 
   it("index.html loads the entry script that registers sw.js (prompt mode, no auto-injected registerSW.js)", () => {
