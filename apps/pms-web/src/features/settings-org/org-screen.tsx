@@ -4,13 +4,14 @@ import { Button } from "@app/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { t } from "../../i18n";
-import { type FormErrors, formErrors, issueErrors } from "../../lib/form-errors";
+import { errorMessage, type FormErrors, formErrors, issueErrors } from "../../lib/form-errors";
 import { useOrg, useOrgApi } from "../../lib/org-context";
 import { can } from "../../lib/permissions";
 import { Field, FormMessage } from "../auth/field";
 
 // foundation#scr-settings-org — owner only (org.update); other roles get the forbidden text and no request.
-const orgKey = ["org"] as const;
+// Keyed by shop: a save answered after a shop switch lands in its own shop's entry, never the current one.
+const orgKey = (orgId: string) => ["org", orgId] as const;
 const fields = ["displayName", "legalName", "taxId", "phone", "receiptFooter"] as const;
 type Values = Record<(typeof fields)[number], string>;
 
@@ -36,7 +37,7 @@ export function OrgScreen() {
   const { membership } = useOrg();
   const isOwner = membership !== null && can(membership.role, "org.settings.update");
   const o = useOrgApi();
-  const query = useQuery({ ...o.queryOptions(orgKey, () => o.request(orgGet)), enabled: isOwner });
+  const query = useQuery({ ...o.queryOptions(orgKey(o.orgId), () => o.request(orgGet)), enabled: isOwner });
   const [saved, setSaved] = useState(false);
 
   return (
@@ -48,7 +49,7 @@ export function OrgScreen() {
         // Re-mount on new server data so the form starts from what was saved.
         <OrgForm key={query.dataUpdatedAt} org={query.data} saved={saved} onSaved={setSaved} />
       ) : (
-        query.error && <FormMessage>{t("errors.INTERNAL")}</FormMessage>
+        query.error && <FormMessage>{errorMessage(query.error)}</FormMessage>
       )}
     </div>
   );
@@ -65,7 +66,7 @@ function OrgForm({ org, saved, onSaved }: { org: Organization; saved: boolean; o
     ...o.mutationOptions((data: OrgUpdateRequest) => o.request(orgUpdate, { body: data })),
     onSuccess: (updated) => {
       onSaved(true);
-      queryClient.setQueryData(orgKey, updated);
+      queryClient.setQueryData(orgKey(updated.id), updated);
     },
     onError: (error) => setErrors(formErrors(error, fields)),
   });

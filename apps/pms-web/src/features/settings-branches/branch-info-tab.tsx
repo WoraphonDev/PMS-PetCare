@@ -45,10 +45,13 @@ function InfoForm({ branch }: { branch: Branch }) {
   const [errors, setErrors] = useState<FormErrors>({ fields: {} });
   const body = changes(branch, values, isActive);
   const mutation = useMutation({
-    ...o.mutationOptions((data: BranchUpdateRequest) => o.request(branchUpdate, { params: { branchId: branch.id }, body: data })),
-    onSuccess: (updated) =>
+    // The shop goes with the variables: callbacks run with the latest render, which may be another shop by then.
+    ...o.mutationOptions(({ body }: { orgId: string; body: BranchUpdateRequest }) =>
+      o.request(branchUpdate, { params: { branchId: branch.id }, body }),
+    ),
+    onSuccess: (updated, { orgId }) =>
       queryClient.setQueryData<BranchListResponse>(
-        branchesKey,
+        branchesKey(orgId),
         (list) => list && { items: list.items.map((b) => (b.id === updated.id ? updated : b)) },
       ),
     onError: (error) => {
@@ -68,7 +71,7 @@ function InfoForm({ branch }: { branch: Branch }) {
       return;
     }
     setErrors({ fields: {} });
-    mutation.mutate(parsed.data);
+    mutation.mutate({ orgId: o.orgId, body: parsed.data });
   }
 
   return (

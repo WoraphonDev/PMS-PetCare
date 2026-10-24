@@ -3,7 +3,7 @@ import { type Branch, BranchCreateRequest, type BranchListResponse, type Subscri
 import { Button } from "@app/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { t } from "../../i18n";
 import { type FormErrors, formErrors, issueErrors } from "../../lib/form-errors";
 import { useOrgApi } from "../../lib/org-context";
@@ -16,20 +16,24 @@ export function CreateBranchDialog({ subscription }: { subscription: Subscriptio
   const o = useOrgApi();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const current = useRef(o.orgId);
+  current.current = o.orgId;
   const [values, setValues] = useState(emptyBranch);
   const [errors, setErrors] = useState<FormErrors>({ fields: {} });
   const mutation = useMutation({
-    ...o.mutationOptions((body: BranchCreateRequest) => o.request(branchCreate, { body })),
-    onSuccess: async (created: Branch) => {
+    // The shop goes with the variables: callbacks run with the latest render, which may be another shop by then.
+    ...o.mutationOptions(({ body }: { orgId: string; body: BranchCreateRequest }) => o.request(branchCreate, { body })),
+    onSuccess: async (created: Branch, { orgId }) => {
       // Known before the refetch, so the detail page never flashes "not found".
-      queryClient.setQueryData<BranchListResponse>(branchesKey, (list) => list && { items: [...list.items, created] });
-      void queryClient.invalidateQueries({ queryKey: branchesKey });
-      void queryClient.invalidateQueries({ queryKey: subscriptionKey });
+      queryClient.setQueryData<BranchListResponse>(branchesKey(orgId), (list) => list && { items: [...list.items, created] });
+      void queryClient.invalidateQueries({ queryKey: branchesKey(orgId) });
+      void queryClient.invalidateQueries({ queryKey: subscriptionKey(orgId) });
+      if (orgId !== current.current) return;
       await navigate({ to: "/settings/branches/$branchId", params: { branchId: created.id } });
     },
-    onError: (error) => {
+    onError: (error, { orgId }) => {
       if (error instanceof ApiError && error.code === "PLAN_LIMIT_REACHED") {
-        void queryClient.invalidateQueries({ queryKey: subscriptionKey });
+        void queryClient.invalidateQueries({ queryKey: subscriptionKey(orgId) });
         setErrors({ fields: {}, form: limitText(subscription) });
       } else if (error instanceof ApiError && error.code === "CONFLICT") {
         setErrors({ fields: { name: t("scr-settings-branches.nameTaken") } });
@@ -54,7 +58,7 @@ export function CreateBranchDialog({ subscription }: { subscription: Subscriptio
       return;
     }
     setErrors({ fields: {} });
-    mutation.mutate(parsed.data);
+    mutation.mutate({ orgId: o.orgId, body: parsed.data });
   }
 
   return (

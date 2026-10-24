@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { th } from "../../src/i18n/th";
-import { apiError, BRANCH_1, json, me, membership, renderApp } from "../shell/render";
+import { apiError, BRANCH_1, json, me, membership, ORG_B, renderApp } from "../shell/render";
 import { branch, second } from "./fixtures";
 
 const f = th["scr-settings-branch"];
@@ -107,5 +107,31 @@ describe("scr-settings-branch (/settings/branches/:branchId)", () => {
     expect(await screen.findByText(th["scr-settings-branches"].nameTaken)).toBeInTheDocument();
     save();
     expect(await screen.findByText(f.notFound)).toBeInTheDocument();
+  });
+
+  it("an update answered after switching shop is not written into the new shop's branch list", async () => {
+    const shops = [membership(), membership({ orgId: ORG_B, name: "Cat Club" })];
+    const r = renderApp("/settings/branches", { "GET /me": json(200, me({}, shops)), "GET /branches": json(200, { items: [branch()] }) });
+    await screen.findByText("สาขาหลัก");
+    await r.router.navigate({ to: "/settings/branches/$branchId", params: { branchId: BRANCH_1 } });
+    await screen.findByDisplayValue("สาขาหลัก");
+    const routed = r.fetch.getMockImplementation();
+    let answer: (res: Response) => void = () => {};
+    r.fetch.mockImplementation(async (url, init) => {
+      if (init?.method === "PATCH") return new Promise<Response>((resolve) => (answer = resolve));
+      if (String(url).endsWith("/branches") && new Headers(init?.headers).get("x-org-id") === ORG_B)
+        return json(200, { items: [second()] });
+      return routed ? routed(url, init) : json(404, {});
+    });
+    fireEvent.change(screen.getByLabelText(f.name), { target: { value: "ชื่อใหม่" } });
+    save();
+    await waitFor(() => expect(r.calls(`PATCH /branches/${BRANCH_1}`)).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: /Cat Club/ }));
+    await r.router.navigate({ to: "/settings/branches" });
+    await screen.findByText("สาขาสอง");
+    answer(json(200, branch({ name: "ชื่อใหม่" })));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(r.queryClient.getQueryData(["branches", ORG_B])).toEqual({ items: [second()] });
+    expect(screen.queryByText("ชื่อใหม่")).toBeNull();
   });
 });

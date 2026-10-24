@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { th } from "../../src/i18n/th";
-import { apiError, json, me, membership, ORG_A, renderApp } from "../shell/render";
+import { apiError, json, me, membership, ORG_A, ORG_B, renderApp } from "../shell/render";
 
 const c = th["scr-settings-org"];
 const at = "2030-01-01T00:00:00.000Z";
@@ -97,5 +97,33 @@ describe("scr-settings-org (/settings/org)", () => {
     expect(screen.getByText(th.errors.FORBIDDEN)).toBeInTheDocument();
     expect(screen.queryByLabelText(c.displayName)).toBeNull();
     expect(r.calls("GET /org")).toHaveLength(0);
+  });
+
+  it("a GET /org failure shows its own message (FORBIDDEN after a role change), not INTERNAL", async () => {
+    await open({ "GET /org": apiError(403, "FORBIDDEN") });
+    expect(await screen.findByRole("alert")).toHaveTextContent(th.errors.FORBIDDEN);
+  });
+
+  it("a save answered after switching shop never shows shop A's data under shop B", async () => {
+    const shops = [membership(), membership({ orgId: ORG_B, name: "Cat Club" })];
+    const r = renderApp("/settings/org", { "GET /me": json(200, me({}, shops)), "GET /org": json(200, org()) });
+    await screen.findByDisplayValue("Happy Paws");
+    const routed = r.fetch.getMockImplementation();
+    let answer: (res: Response) => void = () => {};
+    r.fetch.mockImplementation(async (url, init) => {
+      if (init?.method === "PATCH") return new Promise<Response>((resolve) => (answer = resolve));
+      const orgId = new Headers(init?.headers).get("x-org-id");
+      if (String(url).endsWith("/org") && orgId === ORG_B) return json(200, org({ id: ORG_B, slug: "cat-club", displayName: "Cat Club" }));
+      return routed ? routed(url, init) : json(404, {});
+    });
+    type(c.displayName, "Happy Paws 2");
+    save();
+    await waitFor(() => expect(r.calls("PATCH /org")).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: /Cat Club/ }));
+    await screen.findByDisplayValue("Cat Club");
+    answer(json(200, org({ displayName: "Happy Paws 2" })));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByLabelText(c.displayName)).toHaveValue("Cat Club");
+    expect(screen.queryByDisplayValue("Happy Paws 2")).toBeNull();
   });
 });
