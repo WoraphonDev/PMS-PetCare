@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import {
@@ -12,21 +12,19 @@ import {
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { CLOCK, type Clock } from "../../src/common/context";
-import { AUTH, type Auth } from "../../src/modules/identity";
 import { addManagedMember, addMember, auditOf, call, expectError, insertInvitationRow, orgOf, suspend } from "../org/support";
 import { bootTestApp } from "../support/app";
 import { createTestInfra, type TestInfra } from "../support/infra";
 import { seedOrg } from "../support/seed";
+import { insertPlan, PLATFORM_NOW, platformAdmin, subscribe as subscribeTo } from "./support";
 
 // docs/spec/features/foundation.md §18 #rule-platform-module · #contract-platform-org-read (T-0019-01 B)
 // · #contract-platform-org-status (T-0019-02 A) · platform.org_viewed (T-0019-03 B, T-0019-04 A) · F04 · F10
 let infra: TestInfra;
 let app: NestFastifyApplication;
 // The 2FA proof of a session expires with the real session, so the injected clock stays near real time.
-const NOW = new Date(Math.floor(Date.now() / 1000) * 1000);
-const PASSWORD = "correct-horse-1";
+const NOW = PLATFORM_NOW;
 const MULTI_STEP_TIMEOUT_MS = 30_000;
-let ip = 0;
 beforeAll(async () => {
   infra = await createTestInfra();
   app = await bootTestApp([], undefined, infra);
@@ -40,70 +38,9 @@ afterAll(async () => {
 
 const sql = <R extends Record<string, unknown> = Record<string, unknown>>(q: string, values: unknown[] = []) =>
   infra.platformDb.$client.query<R>(q, values);
-const cookies = (r: { headers: Record<string, unknown> }) =>
-  ([] as string[])
-    .concat((r.headers["set-cookie"] as string | string[]) ?? [])
-    .map((c) => c.split(";")[0])
-    .join("; ");
-const post = (path: string, body: object, cookie: string) =>
-  app.inject({ method: "POST", url: `/api/v1/auth/${path}`, payload: body, headers: { cookie }, remoteAddress: `10.41.0.${++ip}` });
-
-// Independent RFC 6238 generator (same as test/identity/two-factor.test.ts).
-function totp(uri: string, at = new Date()) {
-  const secret = new URL(uri).searchParams.get("secret") as string;
-  const bits = [...secret.toUpperCase()].map((c) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".indexOf(c).toString(2).padStart(5, "0")).join("");
-  const key = Buffer.from(bits.match(/.{8}/g)?.map((b) => Number.parseInt(b, 2)) ?? []);
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(at.getTime() / 30_000)));
-  const digest = createHmac("sha1", key).update(counter).digest();
-  const offset = (digest.at(-1) as number) & 15;
-  return ((digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, "0");
-}
-
-/** A platform admin; `stage` = how far the session got through F10. */
-async function admin(stage: "no-2fa" | "2fa-pending" | "verified" = "verified") {
-  const email = `${randomUUID()}@example.com`;
-  const { user } = await app.get<Auth>(AUTH).api.signUpEmail({ body: { email, password: PASSWORD, name: "Platform admin" } });
-  await sql('update "user" set email_verified = true, is_platform_admin = true where id = $1', [user.id]);
-  const login = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { identifier: email, password: PASSWORD } });
-  let cookie = cookies(login);
-  if (stage !== "no-2fa") {
-    const enabled = await post("2fa/enable", { password: PASSWORD }, cookie);
-    expect(enabled.statusCode).toBe(200);
-    if (stage === "verified") {
-      const verified = await post("2fa/verify", { code: totp(enabled.json<{ totpUri: string }>().totpUri) }, cookie);
-      expect(verified.statusCode).toBe(204);
-      cookie = cookies(verified);
-    }
-  }
-  return { userId: user.id, cookie, headers: { cookie } };
-}
-
-async function plan(
-  fields: { code?: string; name?: string; maxBranches?: number | null; maxStaff?: number | null; isActive?: boolean } = {},
-) {
-  const code = fields.code ?? `test_${randomUUID()}`;
-  const { rows } = await sql<{ id: string }>(
-    "insert into plan (code, name, max_branches, max_staff, price_satang_per_month, is_active) values ($1, $2, $3, $4, 49900, $5) returning id",
-    [
-      code,
-      fields.name ?? "Pro plan",
-      fields.maxBranches === undefined ? 3 : fields.maxBranches,
-      fields.maxStaff === undefined ? 10 : fields.maxStaff,
-      fields.isActive ?? true,
-    ],
-  );
-  return { id: rows[0]!.id, code, name: fields.name ?? "Pro plan" };
-}
-async function subscribe(orgId: string, planId?: string, extra: { currentPeriodEnd?: Date | null; note?: string | null } = {}) {
-  await sql("insert into subscription (org_id, plan_id, started_at, current_period_end, note) values ($1, $2, $3, $4, $5)", [
-    orgId,
-    planId ?? (await plan()).id,
-    new Date("2031-01-02T03:04:05.678Z"),
-    extra.currentPeriodEnd ?? null,
-    extra.note ?? null,
-  ]);
-}
+const admin = (stage?: "no-2fa" | "2fa-pending" | "verified") => platformAdmin(app, infra, stage);
+const plan = (fields?: Parameters<typeof insertPlan>[1]) => insertPlan(infra, fields);
+const subscribe = (orgId: string, planId?: string, extra?: Parameters<typeof subscribeTo>[3]) => subscribeTo(infra, orgId, planId, extra);
 /** A shop with a signed-in owner and a subscription. */
 async function shop(branches: readonly string[] = ["A"]) {
   const s = await seedOrg(app, infra, { role: "owner", branches });

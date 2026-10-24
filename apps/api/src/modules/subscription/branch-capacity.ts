@@ -1,4 +1,5 @@
-import { type TxContext, transactionQuery } from "@app/db";
+import type { TxContext } from "@app/db";
+import { lockPlanLimits } from "./plan-lock";
 
 /**
  * docs/spec/features/foundation.md#rule-branch-capacity — locks the organization's subscription row
@@ -9,10 +10,7 @@ import { type TxContext, transactionQuery } from "@app/db";
  * Inactive or expired plans are still enforced (no lifecycle in the MVP). No subscription fails closed.
  */
 export async function lockBranchLimit(ctx: TxContext): Promise<number | null> {
-  const { rows } = await transactionQuery(ctx.tx)<{ max_branches: number | null }>`
-    SELECT p.max_branches FROM subscription s JOIN plan p ON p.id = s.plan_id
-     WHERE s.org_id = ${ctx.orgId} FOR UPDATE OF s`;
-  const [row] = rows;
-  if (!row) throw new Error("lockBranchLimit: the organization has no subscription");
-  return row.max_branches;
+  const limits = await lockPlanLimits(ctx);
+  if (!limits) throw new Error("lockBranchLimit: the organization has no subscription");
+  return limits.maxBranches;
 }
