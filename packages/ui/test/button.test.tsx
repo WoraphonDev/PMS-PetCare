@@ -75,6 +75,7 @@ describe("Button", () => {
     render(
       <form onSubmit={onSubmit}>
         <Button asChild type="button" variant="ghost">
+          {/* biome-ignore lint/a11y/useButtonType: the type must come from Button asChild — that is what this test checks */}
           <button>ยกเลิก</button>
         </Button>
       </form>,
