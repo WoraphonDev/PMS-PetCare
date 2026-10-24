@@ -10,7 +10,9 @@ import {
   call,
   expectError,
   holdSubscriptionLock,
+  invitationsOf,
   invitationWithToken,
+  membershipsOf,
   signedInAccount,
 } from "../org/support";
 import { bootTestApp } from "../support/app";
@@ -82,7 +84,7 @@ describe("platform.org.setPlan", () => {
       orgId: s.orgId,
       actorUserId: a.userId,
       before: { planCode: s.current.code, currentPeriodEnd: null },
-      after: { planCode: next.code, currentPeriodEnd: "2031-07-01T00:00:00.000Z" },
+      after: { planCode: next.code, currentPeriodEnd: "2031-07-01T00:00:00.000000Z" },
       occurredAt: NOW,
     });
     expect(JSON.stringify(changes)).not.toContain("note");
@@ -101,7 +103,20 @@ describe("platform.org.setPlan", () => {
     expect(await subscriptionRow(s.orgId)).toMatchObject({ planId: s.current.id, startedAt: STARTED, currentPeriodEnd: null, note: null });
     const changes = await planChanges(s.orgId);
     expect(changes.map((r) => [r.before, r.after])).toEqual([
-      [{ currentPeriodEnd: "2031-06-01T00:00:00.000Z" }, { currentPeriodEnd: null }],
+      [{ currentPeriodEnd: "2031-06-01T00:00:00.000000Z" }, { currentPeriodEnd: null }],
+    ]);
+  });
+
+  it("a microsecond-only period change is written and audited with full precision", async () => {
+    const a = await admin();
+    const s = await scene();
+    const send = (currentPeriodEnd: string) => setPlan(a.headers, s.orgId, { planCode: s.current.code, currentPeriodEnd });
+    expect((await send("2031-06-01T00:00:00.123456Z")).statusCode).toBe(200);
+    expect((await send("2031-06-01T07:00:00.123457+07:00")).statusCode).toBe(200);
+    expect((await send("2031-06-01T00:00:00.123457Z")).statusCode).toBe(200);
+    expect((await planChanges(s.orgId)).map((r) => [r.before, r.after])).toEqual([
+      [{ currentPeriodEnd: null }, { currentPeriodEnd: "2031-06-01T00:00:00.123456Z" }],
+      [{ currentPeriodEnd: "2031-06-01T00:00:00.123456Z" }, { currentPeriodEnd: "2031-06-01T00:00:00.123457Z" }],
     ]);
   });
 
@@ -145,9 +160,13 @@ describe("platform.org.setPlan", () => {
         expiresAt: new Date(NOW.getTime() + 86_400_000),
       });
       const small = await insertPlan(infra, { maxBranches: 1, maxStaff: 1, price: 0 });
+      const members = (await membershipsOf(infra, s.orgId)).map((m) => [m.id, m.userId, m.role, m.status]);
+      expect(members).toHaveLength(2);
       expect((await setPlan(a.headers, s.orgId, { planCode: small.code })).statusCode).toBe(200);
 
       expect(await branchesOf(infra, s.orgId)).toHaveLength(2);
+      expect((await membershipsOf(infra, s.orgId)).map((m) => [m.id, m.userId, m.role, m.status])).toEqual(members);
+      expect((await invitationsOf(infra, s.orgId)).map((i) => [i.id, i.acceptedAt, i.revokedAt])).toEqual([[pending.id, null, null]]);
       await expectError(await call(app, "POST", "/branches", s.headers, { name: "C" }), 402, "PLAN_LIMIT_REACHED");
       await expectError(
         await call(app, "POST", "/staff/invitations", s.headers, {

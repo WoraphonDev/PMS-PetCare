@@ -11,7 +11,8 @@ export interface SubscriptionChange {
   now: Date;
 }
 
-const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
+// Audit text of `current_period_end` with Postgres' full precision (microseconds), UTC: a JS Date would drop them.
+const ISO_UTC = 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"';
 
 /**
  * docs/spec/features/foundation.md#contract-platform-set-plan (T-0020-01 A), in the shop's tenant transaction: lock the
@@ -27,11 +28,11 @@ export function changeSubscription(runtimeDb: Db, input: SubscriptionChange): Pr
     const { rows: locked } = await sql<{
       id: string;
       plan_id: string;
-      current_period_end: Date | null;
+      period_text: string | null;
       note: string | null;
       period_changed: boolean;
     }>`
-      SELECT id, plan_id, current_period_end, note,
+      SELECT id, plan_id, to_char(current_period_end AT TIME ZONE 'UTC', ${ISO_UTC}) AS period_text, note,
              current_period_end IS DISTINCT FROM ${input.currentPeriodEnd}::timestamptz AS period_changed
         FROM subscription WHERE org_id = ${input.orgId} FOR UPDATE`;
     const [sub] = locked;
@@ -41,13 +42,13 @@ export function changeSubscription(runtimeDb: Db, input: SubscriptionChange): Pr
     if (!target) throw new AppError("VALIDATION_FAILED", "Invalid request", { fields: { planCode: ["Unknown or inactive plan"] } });
     const planChanged = target.id !== sub.plan_id;
     if (!planChanged && !sub.period_changed && sub.note === input.note) return "unchanged";
-    const { rows: updated } = await sql<{ current_period_end: Date | null }>`
+    const { rows: updated } = await sql<{ period_text: string | null }>`
       UPDATE subscription
          SET plan_id = ${target.id}, current_period_end = ${input.currentPeriodEnd}::timestamptz, note = ${input.note},
              started_at = CASE WHEN ${planChanged}::boolean THEN ${input.now}::timestamptz ELSE started_at END,
              updated_at = ${input.now}
        WHERE id = ${sub.id}
-   RETURNING current_period_end`;
+   RETURNING to_char(current_period_end AT TIME ZONE 'UTC', ${ISO_UTC}) AS period_text`;
     if (planChanged || sub.period_changed) {
       const before: Record<string, unknown> = {};
       const after: Record<string, unknown> = {};
@@ -56,7 +57,7 @@ export function changeSubscription(runtimeDb: Db, input: SubscriptionChange): Pr
         [before.planCode, after.planCode] = [current[0]?.code ?? null, input.planCode];
       }
       if (sub.period_changed) {
-        [before.currentPeriodEnd, after.currentPeriodEnd] = [iso(sub.current_period_end), iso(updated[0]?.current_period_end ?? null)];
+        [before.currentPeriodEnd, after.currentPeriodEnd] = [sub.period_text, updated[0]?.period_text ?? null];
       }
       // entity: the subscription row — T-0020-03 (open) asks the human to confirm.
       await writeAudit(tx, {
