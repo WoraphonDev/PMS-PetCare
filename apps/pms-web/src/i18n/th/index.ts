@@ -10,6 +10,9 @@ import { scrAuthReset } from "./scr-auth-reset";
 import { scrAuthSignup } from "./scr-auth-signup";
 import { scrAuthVerifyEmail } from "./scr-auth-verify-email";
 import { scrOrgSwitcher } from "./scr-org-switcher";
+import { scrSettingsBranch } from "./scr-settings-branch";
+import { scrSettingsBranches } from "./scr-settings-branches";
+import { scrSettingsOrg } from "./scr-settings-org";
 import { shell } from "./shell";
 // registry:end
 
@@ -25,6 +28,9 @@ export const th = {
   "scr-auth-signup": scrAuthSignup,
   "scr-auth-verify-email": scrAuthVerifyEmail,
   "scr-org-switcher": scrOrgSwitcher,
+  "scr-settings-branch": scrSettingsBranch,
+  "scr-settings-branches": scrSettingsBranches,
+  "scr-settings-org": scrSettingsOrg,
   shell,
   // registry:end
 } as const;
