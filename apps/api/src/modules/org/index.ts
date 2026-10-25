@@ -4,6 +4,10 @@ export {
   type BootstrapOrganizationResult,
   bootstrapOrganization,
 } from "./bootstrap";
+export { type ClaimedInvitation, claimInvitation, writeInvitationAccept } from "./invitation-claim";
+export { invitationTokenOrg } from "./invitation-token";
+/** Strict-body pipe whose `details.fields` has no prototype (keys such as `toString` are reported, not crashed on). */
+export { OrgBody } from "./org-body.pipe";
 export {
   type OrgPosition,
   type OrgSearchRow,

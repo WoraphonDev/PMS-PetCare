@@ -5,6 +5,11 @@ export { AUTH_LOGOUT_STATUS } from "./auth.logout";
 export { AUTH_PASSWORD_STATUS, AuthPasswordChangeRequest, AuthPasswordForgotRequest, AuthPasswordResetRequest } from "./auth.password";
 export { AUTH_SIGNUP_STATUS, AuthSignupRequest, AuthSignupResponse } from "./auth.signup";
 export {
+  AUTH_SIGNUP_WITH_INVITATION_STATUS,
+  AuthSignupWithInvitationRequest,
+  AuthSignupWithInvitationResponse,
+} from "./auth.signup_with_invitation";
+export {
   AuthTwoFactorDisableRequest,
   AuthTwoFactorEnableRequest,
   AuthTwoFactorEnableResponse,
