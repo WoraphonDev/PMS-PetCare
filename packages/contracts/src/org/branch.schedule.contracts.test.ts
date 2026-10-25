@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   BRANCH_CLOSURE_CREATE_STATUS,
   BRANCH_CLOSURE_DELETE_STATUS,
+  BRANCH_HOURS_GET_STATUS,
   BRANCH_HOURS_PUT_STATUS,
   BranchClosureCreateRequest,
   BranchClosureListResponse,
   BranchClosureParams,
+  BranchHoursGetResponse,
   BranchHoursPutRequest,
   BranchHoursPutResponse,
   Closure,
@@ -99,6 +101,17 @@ describe("BranchHoursPutRequest", () => {
     expect(BRANCH_HOURS_PUT_STATUS).toBe(200);
     expect(BranchHoursPutResponse.safeParse({ items: week() }).success).toBe(true);
     expect(BranchHoursPutResponse.safeParse({ items: [{ ...day(1), id: "x" }] }).success).toBe(false);
+  });
+});
+
+describe("BranchHoursGetResponse (#contract-branch-hours-get)", () => {
+  it("is the PUT response projection with a 200 status", () => {
+    expect(BRANCH_HOURS_GET_STATUS).toBe(200);
+    expect(BranchHoursGetResponse).toBe(BranchHoursPutResponse);
+    expect(BranchHoursGetResponse.safeParse({ items: [day(1, null, null), ...week().slice(1)] }).success).toBe(true);
+    expect(BranchHoursGetResponse.safeParse({ items: [day(1, "09:00:00")] }).success).toBe(false);
+    expect(BranchHoursGetResponse.safeParse({ items: [{ ...day(1), branchId: "x" }] }).success).toBe(false);
+    expect(BranchHoursGetResponse.safeParse({ items: week(), version: 1 }).success).toBe(false);
   });
 });
 

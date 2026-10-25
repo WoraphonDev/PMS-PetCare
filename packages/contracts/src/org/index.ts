@@ -2,6 +2,7 @@ export { BRANCH_CLOSURE_CREATE_STATUS, BranchClosureCreateRequest, Closure, Loca
 export { BRANCH_CLOSURE_DELETE_STATUS, BranchClosureParams } from "./branch.closure.delete";
 export { BranchClosureListResponse, BranchScheduleParams, ScheduleQuery } from "./branch.closure.list";
 export { BRANCH_CREATE_STATUS, BranchCreateRequest } from "./branch.create";
+export { BRANCH_HOURS_GET_STATUS, BranchHoursGetResponse } from "./branch.hours.get";
 export { BRANCH_HOURS_PUT_STATUS, BranchHoursPutRequest, BranchHoursPutResponse, HhMm } from "./branch.hours.put";
 export { Branch, BranchListResponse } from "./branch.list";
 export { BranchPaymentSettingsUpdateRequest } from "./branch.payment_settings.update";
