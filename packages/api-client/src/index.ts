@@ -10,4 +10,6 @@ export {
 } from "./client";
 // registry:start
 export * from "./endpoints/identity";
+export * from "./endpoints/org";
+export * from "./endpoints/subscription";
 // registry:end
