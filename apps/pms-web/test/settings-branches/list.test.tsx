@@ -68,6 +68,13 @@ describe("scr-settings-branches (/settings/branches)", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(r.calls("POST /branches")).toHaveLength(0);
   });
+  it("a manager demoted to front_desk (cached branches) sees only the forbidden text", async () => {
+    const r = await open({}, "manager");
+    act(() => r.queryClient.setQueryData(meQueryKey, me({}, [membership({ role: "front_desk" })])));
+    expect(await screen.findByText(th.errors.FORBIDDEN)).toBeInTheDocument();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    expect(screen.queryByText("สาขาสอง")).toBeNull();
+  });
 });
 
 describe("branch screens are owner / manager only (foundation §7)", () => {

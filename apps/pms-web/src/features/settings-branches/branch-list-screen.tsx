@@ -20,6 +20,9 @@ export function BranchListScreen() {
   const subscription = mayCreate ? cachedSubscription : undefined;
   const [adding, setAdding] = useState(false);
 
+  // A disabled query keeps its cached rows, so nothing below renders once the role loses access.
+  if (!maySee) return <p>{t("errors.FORBIDDEN")}</p>;
+
   return (
     <div className="flex max-w-lg flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
@@ -30,7 +33,6 @@ export function BranchListScreen() {
           </Button>
         )}
       </div>
-      {!maySee && <p>{t("errors.FORBIDDEN")}</p>}
       {subscription && !underLimit(subscription) && <p className="text-sm text-muted-foreground">{limitText(subscription)}</p>}
       {subscription && underLimit(subscription) && adding && <CreateBranchDialog subscription={subscription} />}
       {branches.error && <FormMessage>{errorMessage(branches.error)}</FormMessage>}
