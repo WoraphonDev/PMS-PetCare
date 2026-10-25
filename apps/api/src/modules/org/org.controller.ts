@@ -2,12 +2,14 @@ import {
   BRANCH_CLOSURE_CREATE_STATUS,
   BRANCH_CLOSURE_DELETE_STATUS,
   BRANCH_CREATE_STATUS,
+  BRANCH_HOURS_GET_STATUS,
   BRANCH_HOURS_PUT_STATUS,
   type Branch,
   BranchClosureCreateRequest,
   type BranchClosureListResponse,
   BranchClosureParams,
   BranchCreateRequest,
+  type BranchHoursGetResponse,
   BranchHoursPutRequest,
   type BranchHoursPutResponse,
   BranchIdParam,
@@ -28,6 +30,7 @@ import { branchClosureCreate } from "./use-cases/branch.closure.create";
 import { branchClosureDelete } from "./use-cases/branch.closure.delete";
 import { branchClosureList } from "./use-cases/branch.closure.list";
 import { branchCreate } from "./use-cases/branch.create";
+import { branchHoursGet } from "./use-cases/branch.hours.get";
 import { branchHoursPut } from "./use-cases/branch.hours.put";
 import { branchList } from "./use-cases/branch.list";
 import { branchPaymentSettingsUpdate } from "./use-cases/branch.payment_settings.update";
@@ -90,6 +93,18 @@ export class OrgController {
     @Body(new OrgBody(BranchPaymentSettingsUpdateRequest)) body: BranchPaymentSettingsUpdateRequest,
   ): Promise<Branch> {
     return branchPaymentSettingsUpdate(req.ctx, branchId.toLowerCase(), body);
+  }
+
+  @Get("branches/:branchId/hours")
+  @HttpCode(BRANCH_HOURS_GET_STATUS)
+  @RequirePermission("org.settings.read")
+  async getHours(
+    @Req() req: Request,
+    @Param(branchParams) params: { branchId: string },
+    @Query(noQuery) _query: unknown,
+  ): Promise<BranchHoursGetResponse> {
+    await assertNoBody(req);
+    return branchHoursGet(req.ctx, params.branchId.toLowerCase());
   }
 
   @Put("branches/:branchId/hours")
