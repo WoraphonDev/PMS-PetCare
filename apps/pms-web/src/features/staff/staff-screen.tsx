@@ -13,6 +13,7 @@ import { useBranches } from "../settings-branches/queries";
 import { AccountDialog } from "./account-dialog";
 import { InviteDialog } from "./invite-dialog";
 import { staffKey, useStaff } from "./queries";
+import { StaffRowActions } from "./staff-row-actions";
 
 type Notice = { kind: "status" | "alert"; text: string } | null;
 type Open = "invite" | "account" | null;
@@ -92,7 +93,7 @@ export function StaffScreen() {
         <>
           <Section title={t("scr-staff.members")}>
             {list.data.members.map((m) => (
-              <MemberRow key={m.membershipId} member={m} branches={branches} />
+              <MemberRow key={m.membershipId} member={m} branches={branches} actions={<StaffRowActions member={m} branches={branches} />} />
             ))}
           </Section>
           <Section title={t("scr-staff.invitations")}>
@@ -127,7 +128,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /** One member; `actions` is the slot for the T-0047 row menu (edit / remove / reset password). */
 export function MemberRow({ member: m, branches, actions }: { member: StaffMember; branches: readonly Branch[]; actions?: ReactNode }) {
   return (
-    <li className="flex items-start justify-between gap-2 px-3 py-2">
+    <li className="flex flex-wrap items-start justify-between gap-2 px-3 py-2">
       <div className="flex min-w-0 flex-col gap-0.5 text-sm">
         <span className="flex flex-wrap items-center gap-2 text-base font-medium">
           {m.displayName}

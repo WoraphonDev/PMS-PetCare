@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { th } from "../../src/i18n/th";
 import { apiError, BRANCH_1, BRANCH_2, json, me, membership, ORG_A, ORG_B } from "../shell/render";
-import { managed, member, staff } from "../staff/fixtures";
+import { managed, member, openStaff, staff } from "../staff/fixtures";
 import { openRows, type Role, row } from "./render";
 
 const c = th["scr-staff-manage"];
@@ -285,5 +285,15 @@ describe("reset password (#contract-staff-password-reset, F09)", () => {
     d.type("temp-pass-99");
     d.submit();
     expect(await d.dialog.findByText(text)).toBeInTheDocument();
+  });
+});
+
+describe("scr-staff wiring (T-0047-01 A)", () => {
+  it("/settings/staff shows the row actions in each member row", async () => {
+    await openStaff();
+    await screen.findByText("น้องเอ");
+    expect(await row("น้องเอ").findByRole("button", { name: c.resetPassword })).toBeInTheDocument();
+    expect(row("สมชาย").getByRole("button", { name: c.edit })).toBeInTheDocument();
+    expect(row("สมชาย").queryByRole("button", { name: c.resetPassword })).toBeNull();
   });
 });
