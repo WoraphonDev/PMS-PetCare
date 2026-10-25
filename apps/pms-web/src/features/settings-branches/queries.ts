@@ -9,10 +9,13 @@ import { canSee } from "../../lib/permissions";
 export const branchesKey = (orgId: string) => ["branches", orgId] as const;
 export const subscriptionKey = (orgId: string) => ["subscription", orgId] as const;
 
+// A disabled query still returns its cached data; hide it so a role that lost access never sees it.
+const gated = <T extends { data: unknown }>(query: T, enabled: boolean): T => (enabled ? query : { ...query, data: undefined });
+
 /** #rule-branch-list — also the only source of one branch (there is no GET /branches/{id}). */
 export function useBranches(enabled = true) {
   const o = useOrgApi();
-  return useQuery({ ...o.queryOptions(branchesKey(o.orgId), () => o.request(branchList)), enabled });
+  return gated(useQuery({ ...o.queryOptions(branchesKey(o.orgId), () => o.request(branchList)), enabled }), enabled);
 }
 
 /** §7: the branch screens are for owner and manager; other roles get the forbidden text and no request. */
@@ -23,7 +26,7 @@ export function useMaySeeBranches() {
 
 export function useSubscription(enabled: boolean) {
   const o = useOrgApi();
-  return useQuery({ ...o.queryOptions(subscriptionKey(o.orgId), () => o.request(subscriptionGet)), enabled });
+  return gated(useQuery({ ...o.queryOptions(subscriptionKey(o.orgId), () => o.request(subscriptionGet)), enabled }), enabled);
 }
 
 /** #rule-branch-capacity as shown: every branch counts; `maxBranches` null = unlimited. */
