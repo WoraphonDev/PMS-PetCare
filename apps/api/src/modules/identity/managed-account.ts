@@ -56,6 +56,33 @@ export async function createManagedAccount(
   return id;
 }
 
+/**
+ * #contract-signup-with-invitation step 4: a real-email account with the invitation's email — verified (the emailed
+ * token proved the inbox), not managed — and its credential account; no session, no email.
+ */
+export async function createInvitedUser(tx: Tx, input: { email: string; name: string; passwordHash: string; now: Date }): Promise<string> {
+  const id = randomUUID();
+  await tx.insert(user).values({
+    id,
+    name: input.name,
+    email: input.email,
+    emailVerified: true,
+    isManaged: false,
+    mustChangePassword: false,
+    createdAt: input.now,
+    updatedAt: input.now,
+  });
+  await tx.insert(account).values({
+    accountId: id,
+    providerId: "credential",
+    userId: id,
+    password: input.passwordHash,
+    createdAt: input.now,
+    updatedAt: input.now,
+  });
+  return id;
+}
+
 /** T-0016-03: new hash, must change it at next login, signed out everywhere (sessions and their 2FA markers); 2FA kept. */
 export async function setManagedPassword(tx: Tx, input: { userId: string; passwordHash: string; now: Date }): Promise<void> {
   const q = transactionQuery(tx);

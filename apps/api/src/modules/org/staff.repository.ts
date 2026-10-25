@@ -183,6 +183,24 @@ export async function findInvitationByHash(tx: Tx, tokenHash: string): Promise<I
   return tx.query.invitation.findFirst({ where: (i, { eq }) => eq(i.tokenHash, tokenHash) });
 }
 
+/** #contract-invitation-preview: the organization's display name (the org exists: its invitation was found). */
+export async function orgDisplayName(tx: Tx, orgId: string): Promise<string> {
+  const org = await tx.query.organization.findFirst({ columns: { displayName: true }, where: (o, { eq }) => eq(o.id, orgId) });
+  if (!org) throw new Error("orgDisplayName: no organization row");
+  return org.displayName;
+}
+
+/** #contract-invitation-preview: names of these branches, sorted by name (then id). */
+export async function branchNamesOf(tx: Tx, branchIds: readonly string[]): Promise<string[]> {
+  if (branchIds.length === 0) return [];
+  const rows = await tx.query.branch.findMany({
+    columns: { name: true },
+    where: (b, { inArray }) => inArray(b.id, [...branchIds]),
+    orderBy: (b, { asc }) => [asc(b.name), asc(b.id)],
+  });
+  return rows.map((r) => r.name);
+}
+
 export async function markInvitationAccepted(tx: Tx, id: string, now: Date): Promise<void> {
   await transactionQuery(tx)`UPDATE invitation SET accepted_at = ${now}, updated_at = ${now} WHERE id = ${id}`;
 }

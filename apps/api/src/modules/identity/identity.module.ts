@@ -16,7 +16,9 @@ import {
   loginLimiter,
   RESEND_LIMITER,
   resendLimiter,
+  SIGNUP_INVITE_LIMITER,
   SIGNUP_LIMITER,
+  signupInviteLimiter,
   signupLimiter,
 } from "./rate-limit";
 
@@ -32,6 +34,7 @@ import {
     { provide: LOGIN_LIMITER, inject: [VALKEY], useFactory: (valkey: Valkey) => loginLimiter(valkey) },
     { provide: FORGOT_LIMITER, inject: [VALKEY], useFactory: (valkey: Valkey) => forgotLimiter(valkey) },
     { provide: SIGNUP_LIMITER, inject: [VALKEY], useFactory: signupLimiter },
+    { provide: SIGNUP_INVITE_LIMITER, inject: [VALKEY], useFactory: signupInviteLimiter },
     { provide: RESEND_LIMITER, inject: [VALKEY], useFactory: resendLimiter },
     { provide: BACKGROUND, useValue: new BackgroundWork() },
     AuthGuard,

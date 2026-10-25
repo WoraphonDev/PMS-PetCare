@@ -1,4 +1,5 @@
 import {
+  AUTH_SIGNUP_WITH_INVITATION_STATUS,
   AuthEmailVerificationResendRequest,
   AuthEmailVerifyRequest,
   AuthLoginRequest,
@@ -8,6 +9,8 @@ import {
   AuthPasswordResetRequest,
   AuthSignupRequest,
   type AuthSignupResponse,
+  AuthSignupWithInvitationRequest,
+  type AuthSignupWithInvitationResponse,
   AuthTwoFactorDisableRequest,
   AuthTwoFactorEnableRequest,
   AuthTwoFactorVerifyRequest,
@@ -20,6 +23,7 @@ import { PLATFORM_DB, RUNTIME_DB } from "../../common/db";
 import { ZodBody } from "../../common/zod.pipe";
 import type { Config } from "../../config";
 import { EMAIL_SENDER, type EmailSender } from "../notification/email";
+import { OrgBody } from "../org";
 import { AUTH, type Auth, toHeaders } from "./auth";
 import { type AuthedRequest, AuthGuard } from "./auth.guard";
 import { BACKGROUND, type BackgroundWork } from "./background";
@@ -29,6 +33,7 @@ import {
   LOGIN_LIMITER,
   RESEND_LIMITER,
   type ResendLimiter,
+  SIGNUP_INVITE_LIMITER,
   SIGNUP_LIMITER,
   type SignupLimiter,
 } from "./rate-limit";
@@ -40,6 +45,7 @@ import { authPasswordChange } from "./use-cases/auth.password_change";
 import { authPasswordForgot } from "./use-cases/auth.password_forgot";
 import { authPasswordReset } from "./use-cases/auth.password_reset";
 import { authSignup } from "./use-cases/auth.signup";
+import { authSignupWithInvitation } from "./use-cases/auth.signup_with_invitation";
 import { authTwoFactor } from "./use-cases/auth.two-factor";
 import { meGet } from "./use-cases/me.get";
 
@@ -56,6 +62,7 @@ export class IdentityController {
     @Inject(RUNTIME_DB) private readonly runtimeDb: Db,
     @Inject(RESEND_LIMITER) private readonly resendLimiter: ResendLimiter,
     @Inject(SIGNUP_LIMITER) private readonly signupLimiter: SignupLimiter,
+    @Inject(SIGNUP_INVITE_LIMITER) private readonly signupInviteLimiter: SignupLimiter,
     @Inject(PLATFORM_DB) private readonly platformDb: Db,
     @Inject(LOGIN_LIMITER) private readonly limiter: FailureLimiter,
     @Inject(FORGOT_LIMITER) private readonly forgotLimiter: FailureLimiter,
@@ -71,6 +78,19 @@ export class IdentityController {
       config: this.config,
       email: this.email,
       limiter: this.signupLimiter,
+    });
+  }
+
+  @Post("auth/signup/invitation")
+  @HttpCode(AUTH_SIGNUP_WITH_INVITATION_STATUS)
+  signupWithInvitation(
+    @Body(new OrgBody(AuthSignupWithInvitationRequest)) body: AuthSignupWithInvitationRequest,
+    @Req() req: { ip: string },
+  ): Promise<AuthSignupWithInvitationResponse> {
+    return authSignupWithInvitation({ now: this.clock.now(), ip: req.ip }, body, {
+      runtimeDb: this.runtimeDb,
+      auth: this.auth,
+      limiter: this.signupInviteLimiter,
     });
   }
 

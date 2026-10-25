@@ -100,17 +100,25 @@ async function consumeAttempt(valkey: Valkey, keys: string[], limits: number[]):
 }
 
 export const SIGNUP_LIMITER = Symbol("SIGNUP_LIMITER");
+export const SIGNUP_INVITE_LIMITER = Symbol("SIGNUP_INVITE_LIMITER");
 export const RESEND_LIMITER = Symbol("RESEND_LIMITER");
 
-export const signupLimiter = (valkey: Valkey): SignupLimiter => ({
-  async consume(ip) {
-    try {
-      return await consumeAttempt(valkey, [attemptKey("signup-attempt", ip)], [5]);
-    } catch {
-      throw new AppError("INTERNAL");
-    }
-  },
-});
+/** 5 schema-valid attempts / hour / trusted IP under `prefix`; Valkey failure fails closed (INTERNAL). */
+const ipLimiter =
+  (prefix: string) =>
+  (valkey: Valkey): SignupLimiter => ({
+    async consume(ip) {
+      try {
+        return await consumeAttempt(valkey, [attemptKey(prefix, ip)], [5]);
+      } catch {
+        throw new AppError("INTERNAL");
+      }
+    },
+  });
+
+export const signupLimiter = ipLimiter("signup-attempt");
+/** #contract-signup-with-invitation: same numbers as signup, its own counter. */
+export const signupInviteLimiter = ipLimiter("signup-invite");
 
 export const resendLimiter = (valkey: Valkey): ResendLimiter => ({
   async consume(email, ip) {

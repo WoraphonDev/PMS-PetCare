@@ -25,11 +25,12 @@ export interface AuthSignupDeps {
 const CONFLICT_CONSTRAINTS = new Set(["user_email_unique", "organization_slug_unique"]);
 const conflict = () => new AppError("CONFLICT", "Email or shop URL already in use");
 
-function isKnownCollision(error: unknown): boolean {
+/** A unique violation of one of `constraints` (also used by auth.signupWithInvitation). */
+export function isUniqueViolation(error: unknown, constraints: ReadonlySet<string>): boolean {
   // Drizzle wraps the pg error in `cause`.
   let e = error as { code?: unknown; constraint?: unknown; cause?: unknown } | undefined;
   for (let depth = 0; e && typeof e === "object" && depth < 5; depth++, e = e.cause as typeof e) {
-    if (e.code === "23505" && typeof e.constraint === "string" && CONFLICT_CONSTRAINTS.has(e.constraint)) return true;
+    if (e.code === "23505" && typeof e.constraint === "string" && constraints.has(e.constraint)) return true;
   }
   return false;
 }
@@ -85,7 +86,7 @@ export async function authSignup(
     );
   } catch (error) {
     if (error instanceof AppError && error.code === "CONFLICT") throw error;
-    if (isKnownCollision(error)) throw conflict();
+    if (isUniqueViolation(error, CONFLICT_CONSTRAINTS)) throw conflict();
     // Sanitized: no SQL, constraint detail or address reaches the client or the log.
     throw new AppError("INTERNAL");
   }
