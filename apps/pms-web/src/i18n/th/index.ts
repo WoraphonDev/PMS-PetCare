@@ -13,6 +13,7 @@ import { scrOrgSwitcher } from "./scr-org-switcher";
 import { scrSettingsBranch } from "./scr-settings-branch";
 import { scrSettingsBranches } from "./scr-settings-branches";
 import { scrSettingsOrg } from "./scr-settings-org";
+import { scrStaff } from "./scr-staff";
 import { shell } from "./shell";
 // registry:end
 
@@ -31,6 +32,7 @@ export const th = {
   "scr-settings-branch": scrSettingsBranch,
   "scr-settings-branches": scrSettingsBranches,
   "scr-settings-org": scrSettingsOrg,
+  "scr-staff": scrStaff,
   shell,
   // registry:end
 } as const;
