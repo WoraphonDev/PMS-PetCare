@@ -1,6 +1,7 @@
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { th } from "../../src/i18n/th";
+import { meQueryKey } from "../../src/lib/session";
 import { apiError, BRANCH_1, BRANCH_2, json, me, membership, ORG_B, renderApp } from "../shell/render";
 import { branch, second, subscription } from "./fixtures";
 
@@ -57,6 +58,15 @@ describe("scr-settings-branches (/settings/branches)", () => {
     const r = await open({}, "manager");
     expect(screen.queryByRole("button", { name: c.add })).toBeNull();
     expect(r.calls("GET /subscription")).toHaveLength(0);
+  });
+  it("an owner demoted to manager (cached subscription) loses the add button and dialog, no create sent", async () => {
+    const r = await open();
+    fireEvent.click(await screen.findByRole("button", { name: c.add }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    act(() => r.queryClient.setQueryData(meQueryKey, me({}, [membership({ role: "manager" })])));
+    await waitFor(() => expect(screen.queryByRole("button", { name: c.add })).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(r.calls("POST /branches")).toHaveLength(0);
   });
 });
 

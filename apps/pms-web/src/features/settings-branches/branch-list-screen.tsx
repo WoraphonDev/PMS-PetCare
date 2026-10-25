@@ -15,7 +15,9 @@ export function BranchListScreen() {
   const maySee = useMaySeeBranches();
   const mayCreate = maySee && membership !== null && can(membership.role, "branch.create");
   const branches = useBranches(maySee);
-  const subscription = useSubscription(mayCreate).data;
+  // A disabled query still returns cached data, so drop it once branch.create is lost.
+  const cachedSubscription = useSubscription(mayCreate).data;
+  const subscription = mayCreate ? cachedSubscription : undefined;
   const [adding, setAdding] = useState(false);
 
   return (
