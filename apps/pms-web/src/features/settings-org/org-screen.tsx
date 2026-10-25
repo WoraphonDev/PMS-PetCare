@@ -46,8 +46,8 @@ export function OrgScreen() {
       {!isOwner ? (
         <p>{t("errors.FORBIDDEN")}</p>
       ) : query.data ? (
-        // Re-mount on new server data so the form starts from what was saved.
-        <OrgForm key={query.dataUpdatedAt} org={query.data} saved={saved} onSaved={setSaved} />
+        // Re-mount per shop only: a background refetch must not drop unsaved edits.
+        <OrgForm key={o.orgId} org={query.data} saved={saved} onSaved={setSaved} />
       ) : (
         query.error && <FormMessage>{errorMessage(query.error)}</FormMessage>
       )}
@@ -55,16 +55,25 @@ export function OrgScreen() {
   );
 }
 
-function OrgForm({ org, saved, onSaved }: { org: Organization; saved: boolean; onSaved: (saved: boolean) => void }) {
+function OrgForm({ org: latest, saved, onSaved }: { org: Organization; saved: boolean; onSaved: (saved: boolean) => void }) {
   const o = useOrgApi();
   const queryClient = useQueryClient();
-  const initial = toValues(org);
-  const [values, setValues] = useState(initial);
+  // `org` is the server copy the form started from; newer server data replaces it only while the form is
+  // untouched (or on save), so a refetch never drops unsaved edits.
+  const [org, setOrg] = useState(latest);
+  const [values, setValues] = useState(() => toValues(latest));
   const [errors, setErrors] = useState<FormErrors>({ fields: {} });
+  const initial = toValues(org);
   const body = changes(initial, values);
+  const reset = (o: Organization) => {
+    setOrg(o);
+    setValues(toValues(o));
+  };
+  if (latest !== org && Object.keys(body).length === 0) reset(latest);
   const mutation = useMutation({
     ...o.mutationOptions((data: OrgUpdateRequest) => o.request(orgUpdate, { body: data })),
     onSuccess: (updated) => {
+      reset(updated);
       onSaved(true);
       queryClient.setQueryData(orgKey(updated.id), updated);
     },

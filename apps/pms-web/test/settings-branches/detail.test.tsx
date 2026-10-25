@@ -1,7 +1,8 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { th } from "../../src/i18n/th";
-import { apiError, BRANCH_1, json, me, membership, ORG_B, renderApp } from "../shell/render";
+import { apiError, BRANCH_1, json, me, membership, ORG_A, ORG_B, renderApp } from "../shell/render";
 import { branch, second } from "./fixtures";
 
 const f = th["scr-settings-branch"];
@@ -17,6 +18,12 @@ async function open(id = BRANCH_1, routes: Record<string, Response | Response[]>
   return r;
 }
 const patchBody = (r: Awaited<ReturnType<typeof open>>) => JSON.parse(String(r.calls(`PATCH /branches/${BRANCH_1}`)[0]?.[1]?.body));
+// TanStack notifies observers on a timer, so let the cache write reach the form before asserting.
+const refetched = (r: { queryClient: QueryClient }, key: readonly unknown[], data: unknown) =>
+  act(async () => {
+    r.queryClient.setQueryData(key, data);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 const save = () => fireEvent.click(screen.getByRole("button", { name: f.save }));
 
 describe("scr-settings-branch (/settings/branches/:branchId)", () => {
@@ -133,5 +140,15 @@ describe("scr-settings-branch (/settings/branches/:branchId)", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(r.queryClient.getQueryData(["branches", ORG_B])).toEqual({ items: [second()] });
     expect(screen.queryByText("ชื่อใหม่")).toBeNull();
+  });
+
+  it("a background refetch keeps unsaved edits; an untouched form takes the new server values", async () => {
+    const r = await open();
+    fireEvent.change(await screen.findByLabelText(f.phone), { target: { value: "029999999" } });
+    await refetched(r, ["branches", ORG_A], { items: [branch({ address: "ที่อยู่ใหม่" }), second()] });
+    expect(screen.getByLabelText(f.phone)).toHaveValue("029999999");
+    fireEvent.change(screen.getByLabelText(f.phone), { target: { value: branch().phone ?? "" } });
+    await refetched(r, ["branches", ORG_A], { items: [branch({ address: "ที่อยู่ใหม่อีก" }), second()] });
+    expect(screen.getByLabelText(f.address)).toHaveValue("ที่อยู่ใหม่อีก");
   });
 });

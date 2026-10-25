@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { th } from "../../src/i18n/th";
 import { apiError, json, me, membership, ORG_A, ORG_B, renderApp } from "../shell/render";
@@ -27,6 +28,12 @@ async function open(routes: Record<string, Response | Response[]> = {}, role: "o
 }
 const sentBody = (r: Awaited<ReturnType<typeof open>>) => JSON.parse(String(r.calls("PATCH /org")[0]?.[1]?.body));
 const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+// TanStack notifies observers on a timer, so let the cache write reach the form before asserting.
+const refetched = (r: { queryClient: QueryClient }, key: readonly unknown[], data: unknown) =>
+  act(async () => {
+    r.queryClient.setQueryData(key, data);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 const save = () => fireEvent.click(screen.getByRole("button", { name: c.save }));
 
 describe("scr-settings-org (/settings/org)", () => {
@@ -125,5 +132,16 @@ describe("scr-settings-org (/settings/org)", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.getByLabelText(c.displayName)).toHaveValue("Cat Club");
     expect(screen.queryByDisplayValue("Happy Paws 2")).toBeNull();
+  });
+
+  it("a background refetch keeps unsaved edits; an untouched form takes the new server values", async () => {
+    const r = await open();
+    await screen.findByDisplayValue("Happy Paws");
+    type(c.phone, "029999999");
+    await refetched(r, ["org", ORG_A], org({ legalName: "เปลี่ยนจากที่อื่น" }));
+    expect(screen.getByLabelText(c.phone)).toHaveValue("029999999");
+    type(c.phone, "021234567");
+    await refetched(r, ["org", ORG_A], org({ legalName: "เปลี่ยนอีกครั้ง" }));
+    expect(screen.getByLabelText(c.legalName)).toHaveValue("เปลี่ยนอีกครั้ง");
   });
 });

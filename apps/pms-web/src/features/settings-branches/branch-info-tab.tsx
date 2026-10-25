@@ -15,8 +15,8 @@ import { branchesKey, useBranches, useMaySeeBranches } from "./queries";
 export function BranchInfoTab({ branchId }: { branchId: string }) {
   const branches = useBranches(useMaySeeBranches());
   const branch = branches.data?.items.find((b) => b.id === branchId);
-  // The layout shows "not found"; re-mount on new server data so the form starts from what was saved.
-  return branch ? <InfoForm key={`${branch.id}:${branches.dataUpdatedAt}`} branch={branch} /> : null;
+  // The layout shows "not found"; a background refetch must not re-mount the form and drop unsaved edits.
+  return branch ? <InfoForm key={branch.id} branch={branch} /> : null;
 }
 
 /** Only changed fields; the coordinates go as a pair whenever either changed (#contract-branch). */
@@ -34,26 +34,37 @@ function changes(branch: Branch, values: ReturnType<typeof branchValues>, isActi
   return body;
 }
 
-function InfoForm({ branch }: { branch: Branch }) {
+function InfoForm({ branch: latest }: { branch: Branch }) {
   const { membership } = useOrg();
   const editable = membership !== null && can(membership.role, "branch.update");
   const o = useOrgApi();
   const queryClient = useQueryClient();
   const activeId = useId();
-  const [values, setValues] = useState(() => branchValues(branch));
-  const [isActive, setIsActive] = useState(branch.isActive);
+  // `branch` is the server copy the form started from; newer server data replaces it only while the form is
+  // untouched (or on save), so a refetch never drops unsaved edits.
+  const [branch, setBranch] = useState(latest);
+  const [values, setValues] = useState(() => branchValues(latest));
+  const [isActive, setIsActive] = useState(latest.isActive);
   const [errors, setErrors] = useState<FormErrors>({ fields: {} });
   const body = changes(branch, values, isActive);
+  const reset = (b: Branch) => {
+    setBranch(b);
+    setValues(branchValues(b));
+    setIsActive(b.isActive);
+  };
+  if (latest !== branch && Object.keys(body).length === 0) reset(latest);
   const mutation = useMutation({
     // The shop goes with the variables: callbacks run with the latest render, which may be another shop by then.
     ...o.mutationOptions(({ body }: { orgId: string; body: BranchUpdateRequest }) =>
       o.request(branchUpdate, { params: { branchId: branch.id }, body }),
     ),
-    onSuccess: (updated, { orgId }) =>
+    onSuccess: (updated, { orgId }) => {
+      reset(updated);
       queryClient.setQueryData<BranchListResponse>(
         branchesKey(orgId),
         (list) => list && { items: list.items.map((b) => (b.id === updated.id ? updated : b)) },
-      ),
+      );
+    },
     onError: (error) => {
       const code = error instanceof ApiError ? error.code : null;
       if (code === "CONFLICT") setErrors({ fields: { name: t("scr-settings-branches.nameTaken") } });
