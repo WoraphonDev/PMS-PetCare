@@ -7,7 +7,13 @@ import {
   AuthPasswordForgotRequest,
   AuthPasswordResetRequest,
   AuthSignupRequest,
+  AuthSignupWithInvitationRequest,
+  AuthSignupWithInvitationResponse,
   AuthTwoFactorVerifyRequest,
+  InvitationAcceptRequest,
+  InvitationAcceptResponse,
+  InvitationPreviewRequest,
+  InvitationPreviewResponse,
   type MeResponse,
 } from "@app/contracts";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -20,8 +26,11 @@ import {
   authPasswordForgot,
   authPasswordReset,
   authSignup,
+  authSignupWithInvitation,
   authTwoFactorVerify,
   createApiClient,
+  invitationAccept,
+  invitationPreview,
   meGet,
 } from "../../src/index";
 
@@ -208,5 +217,68 @@ describe("auth.logout (T-0024, foundation#ep-auth.logout)", () => {
     expect(new Headers(init?.headers).get("content-type")).toBeNull();
     expect(new Headers(init?.headers).get("x-org-id")).toBeNull();
     expect(authLogout.response).toBeNull();
+  });
+});
+
+describe("invitation descriptors (T-0047, foundation#contract-invitation-accept / -preview / -signup-with-invitation)", () => {
+  const ORG_ID = "6f1c0e8e-2f4b-4b8e-9a51-0d3c9b1a7e21";
+  const token = `${ORG_ID}.abc`;
+  const preview = {
+    orgDisplayName: "Happy Paws",
+    role: "groomer",
+    branchNames: ["สาขาหลัก"],
+    email: "staff@example.com",
+    expiresAt: "2030-01-08T00:00:00.000Z",
+  };
+  const accepted = {
+    orgId: ORG_ID,
+    membershipId: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+    role: "groomer",
+    branchIds: ["8a0b5c1d-3e2f-4a6b-8c7d-9e0f1a2b3c4d"],
+  };
+
+  it.each([
+    [
+      "invitation.preview",
+      invitationPreview,
+      "/api/v1/invitations/preview",
+      { token },
+      200,
+      preview,
+      InvitationPreviewRequest,
+      InvitationPreviewResponse,
+    ],
+    [
+      "invitation.accept",
+      invitationAccept,
+      "/api/v1/invitations/accept",
+      { token },
+      200,
+      accepted,
+      InvitationAcceptRequest,
+      InvitationAcceptResponse,
+    ],
+    [
+      "auth.signupWithInvitation",
+      authSignupWithInvitation,
+      "/api/v1/auth/signup/invitation",
+      { token, displayName: "น้องบี", password: "new-password-1" },
+      201,
+      { orgId: ORG_ID, role: "groomer" },
+      AuthSignupWithInvitationRequest,
+      AuthSignupWithInvitationResponse,
+    ],
+  ] as const)("%s: POST %s with the token in the JSON body, no X-Org-Id", async (_, endpoint, url, body, status, response, req, res) => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(JSON.stringify(response), { status }));
+    const api = createApiClient({ baseUrl: "/api/v1", fetch });
+    const request = api.request as (endpoint: unknown, input: unknown) => Promise<unknown>;
+    await expect(request(endpoint, { body })).resolves.toEqual(response);
+    const [sentUrl, init] = fetch.mock.calls[0] ?? [];
+    const headers = new Headers(init?.headers);
+    expect({ url: sentUrl, method: init?.method, body: init?.body }).toEqual({ url, method: "POST", body: JSON.stringify(body) });
+    expect(headers.get("x-org-id")).toBeNull();
+    expect(String(sentUrl)).not.toContain(token);
+    expect(endpoint.body).toBe(req);
+    expect(endpoint.response).toBe(res);
   });
 });

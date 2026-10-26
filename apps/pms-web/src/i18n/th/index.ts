@@ -9,11 +9,13 @@ import { scrAuthLogin } from "./scr-auth-login";
 import { scrAuthReset } from "./scr-auth-reset";
 import { scrAuthSignup } from "./scr-auth-signup";
 import { scrAuthVerifyEmail } from "./scr-auth-verify-email";
+import { scrInviteAccept } from "./scr-invite-accept";
 import { scrOrgSwitcher } from "./scr-org-switcher";
 import { scrSettingsBranch } from "./scr-settings-branch";
 import { scrSettingsBranches } from "./scr-settings-branches";
 import { scrSettingsOrg } from "./scr-settings-org";
 import { scrStaff } from "./scr-staff";
+import { scrStaffManage } from "./scr-staff-manage";
 import { shell } from "./shell";
 // registry:end
 
@@ -28,10 +30,12 @@ export const th = {
   "scr-auth-reset": scrAuthReset,
   "scr-auth-signup": scrAuthSignup,
   "scr-auth-verify-email": scrAuthVerifyEmail,
+  "scr-invite-accept": scrInviteAccept,
   "scr-org-switcher": scrOrgSwitcher,
   "scr-settings-branch": scrSettingsBranch,
   "scr-settings-branches": scrSettingsBranches,
   "scr-settings-org": scrSettingsOrg,
+  "scr-staff-manage": scrStaffManage,
   "scr-staff": scrStaff,
   shell,
   // registry:end
